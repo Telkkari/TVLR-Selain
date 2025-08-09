@@ -17,3 +17,5 @@ Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
 ![Public Domain](https://licensebuttons.net/p/zero/1.0/88x31.png)  
 Datan lisenssi: [Creative Commons CC0](https://creativecommons.org/publicdomain/zero/1.0/deed.fi) – ei tekijänoikeutta.  
 Dataa voi lupaa pyytämättä kopioida, muokata, levittää ja esittää, mukaan lukien kaupallisessa tarkoituksessa.
+
+**Tagit:** #CSharp #WinForms #.NET #Windows
