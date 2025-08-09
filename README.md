@@ -10,5 +10,5 @@ https://elavaarkisto.kokeile.yle.fi/data/
 
 
 Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
-  - Lataa: https://dotnet.microsoft.com/en-us/download/dotnet/9.0
+  - Lataa: [https://dotnet.microsoft.com/en-us/download/dotnet/9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0/runtime)
 
