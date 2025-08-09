@@ -3,7 +3,7 @@ TVLR-Selain on Yleisradion TV-lähetysrekisterin selaukseen tarkoitettu ohjelma.
 
 ## Yleistä
 Ohjelma mahdollistaa Yleisradion TV-lähetysrekisterin (1985–1999) ohjelmatietojen selaamisen ja hakemisen.
-Tietokanta sisältää kaikki TV1:n ja TV2:n lähetykset kyseisiltä vuosilta sekä MTV:n ohjelmat vuosilta 1985–1992.
+Lähetysrekisteri sisältää kaikki TV1:n ja TV2:n lähetykset kyseisiltä vuosilta sekä MTV:n ohjelmat vuosilta 1985–1992.
 
 Lähdedata on peräisin Ylen elävästä arkistosta.
 https://elavaarkisto.kokeile.yle.fi/data/
