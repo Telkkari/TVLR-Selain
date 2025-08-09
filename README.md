@@ -1,5 +1,5 @@
 # TVLR-Selain 2.0
-TVLR-Selain on Yleisradion TV-lähetysrekisterin selaamiseen tarkoitettu ohjelma.
+TVLR-Selain on Yleisradion TV-lähetysrekisterin selaukseen tarkoitettu ohjelma.
 
 ## Yleistä
 Ohjelma mahdollistaa Yleisradion TV-lähetysrekisterin (1985–1999) ohjelmatietojen selaamisen ja hakemisen.
