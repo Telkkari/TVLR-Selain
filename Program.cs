@@ -11,7 +11,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Microsoft.VisualBasic.FileIO;
-using System.Windows.Forms;
 
 
 internal static class Program
@@ -533,3 +532,4 @@ public class TvlrRow
         }
     }
 }
+
