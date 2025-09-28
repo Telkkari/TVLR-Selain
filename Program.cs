@@ -45,7 +45,7 @@ public class MainForm : Form
     {
         this.Size = new Size(1400, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        Text = "TV-lähetysrekisteri selain 1985–1999 2.0";
+        Text = "TVLR-Selain 1985–1999 2.1";
         MinimumSize = new Size(1200, 720);
         Icon = SystemIcons.Information;
 
@@ -532,4 +532,3 @@ public class TvlrRow
         }
     }
 }
-
