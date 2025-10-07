@@ -12,7 +12,7 @@ https://elavaarkisto.kokeile.yle.fi/data/
 Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
   - Lataa: [https://dotnet.microsoft.com/en-us/download/dotnet/9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0/runtime)
 
-## Mahdollisia lisäyksiä ohjelmaan tulevaisuudessa
+## Mahdollisia lisäyksiä ohjelmaan:
   - Elonetin API-rajapinta.
   - Laajentaa ohjelmatietoja ainakin vuoteen 2010.
   - Muiden kanavien ohjelmatietojen lisäys.
