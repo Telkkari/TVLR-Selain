@@ -13,6 +13,7 @@ using System.Windows.Forms;
 using Microsoft.VisualBasic.FileIO;
 
 
+
 internal static class Program
 {
     [STAThread]
@@ -20,13 +21,77 @@ internal static class Program
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+        SovellusAsetukset.Lataa();
+
         ApplicationConfiguration.Initialize();
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+
         Application.Run(new MainForm());
     }
+
+
 }
 
 public class MainForm : Form
 {
+public void AsetaTeema(Control juuri, bool tumma)
+{
+    Color bg = tumma ? Teema.TummaTausta : SystemColors.Control;
+    Color fg = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
+
+    if (juuri is Form or Panel or TableLayoutPanel or FlowLayoutPanel)
+    {
+        juuri.BackColor = bg;
+        juuri.ForeColor = fg;
+    }
+
+    foreach (Control c in juuri.Controls)
+    {
+        if (c is DataGridView)
+            continue;
+        if (c is TableLayoutPanel or FlowLayoutPanel)
+            c.BackColor = tumma ? Teema.TummaTausta : SystemColors.Control;
+        if (c is Label or CheckBox or RadioButton)
+        {
+            c.BackColor = bg;
+            c.ForeColor = fg;
+        }
+        else if (c is TextBox tb)
+        {
+            tb.BackColor = tumma ? Color.FromArgb(32, 32, 32) : Color.White;
+            tb.ForeColor = tumma ? Teema.TummaTeksti : Color.Black;
+        }
+        else if (c is Button b)
+        {
+            b.UseVisualStyleBackColor = false;
+            b.BackColor = tumma ? Color.FromArgb(45, 45, 45) : SystemColors.Control;
+            b.ForeColor = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
+        }
+        else if (c is ComboBox cb)
+        {
+            cb.BackColor = tumma ? Color.FromArgb(32, 32, 32) : Color.White;
+            cb.ForeColor = tumma ? Teema.TummaTeksti : Color.Black;
+            cb.FlatStyle = FlatStyle.Popup;
+        }
+        else if (c is CheckBox chk)
+        {
+            chk.ForeColor = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
+        }
+        else if (c is DateTimePicker dtp)
+        {
+            if (tumma)
+            {
+                dtp.CalendarMonthBackground = Teema.TummaTausta;
+                dtp.CalendarForeColor = Teema.TummaTeksti;
+            }
+        }
+        AsetaTeema(c, tumma);
+    }
+}
+
+
     TextBox txtHaku;
     ComboBox cboVerkko;
     CheckBox chkInterval;
@@ -37,15 +102,40 @@ public class MainForm : Form
     Button btnAvaa, btnTyhjenna, btnTietoa;
     DataGridView grid;
     Label lblStatus;
+    
 
     private readonly BindingList<TvlrRow> _allRows = new();
     private readonly BindingList<TvlrRow> _viewRows = new();
+    private void Grid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+{
+    if (e.RowIndex < 0 || e.ColumnIndex < 0)
+        return;
+
+    var col = grid.Columns[e.ColumnIndex];
+    if (col.DataPropertyName != nameof(TvlrRow.PaivaStr))
+        return;
+
+    if (grid.Rows[e.RowIndex].DataBoundItem is not TvlrRow row)
+        return;
+
+    if (row.Paiva == DateTime.MinValue)
+        return;
+
+    chkPaiva.Checked = true;
+    chkInterval.Checked = false;
+
+    dtpPaiva.Value = row.Paiva;
+
+    ApplyFilters();
+}
 
     public MainForm()
     {
+        
+        TopMost = SovellusAsetukset.AinaPaalla;
         this.Size = new Size(1400, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        Text = "TVLR-Selain 1985–1999 2.1";
+        Text = "TVLR-Selain 2.2";
         MinimumSize = new Size(1200, 720);
         Icon = SystemIcons.Information;
 
@@ -68,6 +158,7 @@ public class MainForm : Form
             RowCount = 2,
             AutoSize = true
         };
+        
         for (int i = 0; i < strip.ColumnCount; i++)
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
@@ -85,18 +176,18 @@ public class MainForm : Form
         chkInterval = new CheckBox { Text = "Hae aikavälillä", AutoSize = true };
         chkInterval.CheckedChanged += (_, __) => { UpdateDatePickersEnabled(); ApplyFilters(); };
 
-        dtpAlku = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "yyyy-MM-dd", Width = 120 };
+        dtpAlku = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "dd.MM.yyyy", Width = 120 };
         dtpAlku.Value = new DateTime(1985, 1, 1);
         dtpAlku.ValueChanged += (_, __) => ApplyFilters();
 
-        dtpLoppu = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "yyyy-MM-dd", Width = 120 };
+        dtpLoppu = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "dd.MM.yyyy", Width = 120 };
         dtpLoppu.Value = new DateTime(1999, 12, 31);
         dtpLoppu.ValueChanged += (_, __) => ApplyFilters();
 
         chkPaiva = new CheckBox { Text = "Hae päivämäärällä", AutoSize = true };
         chkPaiva.CheckedChanged += (_, __) => { UpdateDatePickersEnabled(); ApplyFilters(); };
 
-        dtpPaiva = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "yyyy-MM-dd", Width = 120 };
+        dtpPaiva = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "dd.MM.yyyy", Width = 120 };
         dtpPaiva.Value = new DateTime(1999, 12, 31);
         dtpPaiva.ValueChanged += (_, __) => { if (chkPaiva.Checked) ApplyFilters(); };
 
@@ -112,16 +203,20 @@ public class MainForm : Form
             dtpPaiva.Value = new DateTime(1999, 12, 31);
             ApplyFilters();
         };
+            
+        btnTietoa = new Button
+        {
+            Text = "Asetukset",
+            AutoSize = true,
+            Padding = new Padding(10, 6, 10, 6)
+        };
 
-        btnTietoa = new Button { Text = "Tietoja", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
         btnTietoa.Click += (_, __) =>
         {
-            MessageBox.Show(
-                "Datan lisenssi: CC0-lisenssi: ei tekijänoikeutta. Dataa voi lupaa pyytämättä kopioida, muokata, levittää ja esittää, mukaan lukien kaupallisessa tarkoituksessa.\n\n" +
-                "https://elavaarkisto.kokeile.yle.fi/data/\n\n" +                
-                "Telkkari 2025",
-                "Tietoja", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using var asetukset = new AsetuksetForm();
+            asetukset.ShowDialog(this);
         };
+
 
         strip.Controls.Add(new Label { Text = "Avaa data", AutoSize = true }, 0, 0);
         strip.Controls.Add(new Label { Text = "Haku", AutoSize = true }, 1, 0);
@@ -148,14 +243,19 @@ public class MainForm : Form
 
         layout.Controls.Add(strip, 0, 0);
 
+
         grid = new DataGridView
         {
+            
             Dock = DockStyle.Fill,
             ReadOnly = true,
             AllowUserToAddRows = false,
             AutoGenerateColumns = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(248, 248, 248) },
+            AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
+            {
+                BackColor = Color.FromArgb(248, 248, 248)
+            },
             BorderStyle = BorderStyle.None,
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
             ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
@@ -164,6 +264,12 @@ public class MainForm : Form
                 WrapMode = DataGridViewTriState.False
             }
         };
+        grid.CellDoubleClick += Grid_CellDoubleClick;
+        grid.ClipboardCopyMode =
+            DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
+        grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
+        grid.MultiSelect = true;
+
         AddColumn("Päivä", nameof(TvlrRow.PaivaStr), 85);
         AddColumn("Kello", nameof(TvlrRow.KelloStr), 60);
         AddColumn("Kesto", nameof(TvlrRow.KestoStr), 70);
@@ -175,14 +281,89 @@ public class MainForm : Form
         AddColumn("DOCN", nameof(TvlrRow.DOCN), 90);
         grid.DataSource = _viewRows;
         layout.Controls.Add(grid, 0, 1);
+    if (SovellusAsetukset.TummaTeema)
+        {
+            grid.EnableHeadersVisualStyles = false;
 
-        lblStatus = new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(2, 8, 2, 8) };
+            grid.BackgroundColor = Teema.TummaTausta;
+            grid.GridColor = Color.FromArgb(64, 64, 64);
+
+            grid.ColumnHeadersDefaultCellStyle.BackColor = Teema.TummaPaneeli;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = Teema.TummaTeksti;
+            grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = Teema.TummaPaneeli;
+            grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = Teema.TummaTeksti;
+
+            grid.DefaultCellStyle.BackColor = Teema.TummaTausta;
+            grid.DefaultCellStyle.ForeColor = Teema.TummaTeksti;
+
+            grid.DefaultCellStyle.SelectionBackColor = Teema.ValintaTausta;
+            grid.DefaultCellStyle.SelectionForeColor = Teema.ValintaTeksti;
+
+            grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(30, 30, 30);
+            grid.AlternatingRowsDefaultCellStyle.ForeColor = Teema.TummaTeksti;
+            grid.AlternatingRowsDefaultCellStyle.SelectionBackColor = Teema.ValintaTausta;
+            grid.AlternatingRowsDefaultCellStyle.SelectionForeColor = Teema.ValintaTeksti;
+
+            grid.RowHeadersDefaultCellStyle.BackColor = Teema.TummaPaneeli;
+            grid.RowHeadersDefaultCellStyle.ForeColor = Teema.TummaTeksti;
+            grid.RowHeadersDefaultCellStyle.SelectionBackColor = Teema.ValintaTausta;
+            grid.RowHeadersDefaultCellStyle.SelectionForeColor = Teema.ValintaTeksti;
+        }
+        else
+        {
+            grid.EnableHeadersVisualStyles = true;
+
+            grid.BackgroundColor = SystemColors.Window;
+            grid.GridColor = SystemColors.ControlDark;
+
+            grid.ColumnHeadersDefaultCellStyle.BackColor = SystemColors.Control;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = SystemColors.ControlText;
+            grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = SystemColors.Control;
+            grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = SystemColors.ControlText;
+
+            grid.DefaultCellStyle.BackColor = Color.White;
+            grid.DefaultCellStyle.ForeColor = Color.Black;
+
+            grid.DefaultCellStyle.SelectionBackColor = SystemColors.Highlight;
+            grid.DefaultCellStyle.SelectionForeColor = SystemColors.HighlightText;
+
+            grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 248, 248);
+            grid.AlternatingRowsDefaultCellStyle.ForeColor = Color.Black;
+            grid.AlternatingRowsDefaultCellStyle.SelectionBackColor = SystemColors.Highlight;
+            grid.AlternatingRowsDefaultCellStyle.SelectionForeColor = SystemColors.HighlightText;
+
+            grid.RowHeadersDefaultCellStyle.BackColor = SystemColors.Control;
+            grid.RowHeadersDefaultCellStyle.ForeColor = SystemColors.ControlText;
+            grid.RowHeadersDefaultCellStyle.SelectionBackColor = SystemColors.Highlight;
+            grid.RowHeadersDefaultCellStyle.SelectionForeColor = SystemColors.HighlightText;
+        }
+
+
+        lblStatus = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Padding = new Padding(2, 8, 2, 8),
+            TabStop = false
+        };
+
+
         layout.Controls.Add(lblStatus, 0, 2);
 
         UpdateDatePickersEnabled();
         UpdateStatus();
 
         TryAutoLoadData();
+        if (SovellusAsetukset.TummaTeema)
+        {
+            this.BackColor = Teema.TummaTausta;
+            this.ForeColor = Teema.TummaTeksti;
+        }
+        else
+        {
+            this.BackColor = SystemColors.Control;
+            this.ForeColor = SystemColors.ControlText;
+        }
     }
 
     private void AddColumn(string header, string dataProp, int width, bool fill = false)
@@ -224,7 +405,7 @@ public class MainForm : Form
                 return;
             }
 
-            lblStatus.Text = "Dataa ei löytynyt sovelluskansiosta. Aseta TVLR_combi_publicV1.csv tai tvlahetysrekisteri1985-1999.zip samaan kansioon, tai avaa itse.";
+            lblStatus.Text = "Dataa ei löytynyt sovelluskansiosta. Aseta TVLR_combi_publicV1.csv tai tvlahetysrekisteri1985-1999.zip samaan kansioon tai avaa itse.";
         }
         catch (Exception ex)
         {
@@ -326,10 +507,10 @@ public class MainForm : Form
     private void UpdateStatus()
     {
         string rangeText = chkPaiva.Checked
-            ? $"Päivä: {dtpPaiva.Value:yyyy-MM-dd}"
+            ? $"Päivämäärä: {dtpPaiva.Value:dd.MM.yyyy}"
             : (chkInterval.Checked
-                ? $"Aikaväli: {dtpAlku.Value:yyyy-MM-dd} – {dtpLoppu.Value:yyyy-MM-dd}"
-                : "Ei päiväsuodatusta");
+                ? $"Aikaväli: {dtpAlku.Value:dd.MM.yyyy} – {dtpLoppu.Value:dd.MM.yyyy}"
+                : "Ei päivämääräsuodatusta");
 
         lblStatus.Text = _allRows.Count == 0
             ? "Lataa data automaattisesti tai avaa tiedosto."
@@ -520,7 +701,7 @@ public class TvlrRow
     public TimeSpan? KestoTimeSpan { get; set; }
     public string Verkko { get; set; } = "";
 
-    public string PaivaStr => Paiva == DateTime.MinValue ? "" : Paiva.ToString("yyyy-MM-dd");
+    public string PaivaStr => Paiva == DateTime.MinValue ? "" : Paiva.ToString("dd.MM.yyyy");
     public string KelloStr => KelloTimeSpan.HasValue ? $"{(int)KelloTimeSpan.Value.TotalHours:00}:{KelloTimeSpan.Value.Minutes:00}" : "";
     public string KestoStr
     {
@@ -530,5 +711,188 @@ public class TvlrRow
             var t = KestoTimeSpan.Value;
             return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
         }
+    }
+}
+public class AsetuksetForm : Form
+{
+    Button btnTallenna;
+    CheckBox chkAinaPaalla;
+    CheckBox chkTummaTeema;
+    Button btnTietoja;
+
+
+
+    public AsetuksetForm()
+    {
+        TopMost = SovellusAsetukset.AinaPaalla; 
+        Text = "Asetukset";
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        ClientSize = new Size(360, 120);
+        
+        var asettelu = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 3
+        };
+
+        chkAinaPaalla = new CheckBox
+        {
+            Text = "Näytä aina päällimmäisenä",
+            AutoSize = true,
+            Checked = SovellusAsetukset.AinaPaalla
+        };
+        chkTummaTeema = new CheckBox
+        {
+            Text = "Tumma teema",
+            AutoSize = true,
+            Checked = SovellusAsetukset.TummaTeema
+        };
+
+        asettelu.Controls.Add(chkTummaTeema);
+
+
+        asettelu.Controls.Add(chkAinaPaalla);
+        SovellusAsetukset.TummaTeema = chkTummaTeema.Checked;
+        if (Owner is MainForm mf)
+            mf.AsetaTeema(mf, SovellusAsetukset.TummaTeema);
+        btnTietoja = new Button
+        {
+            Text = "Tietoja",
+            Size = new Size(100, 25),
+        };
+
+        btnTietoja.Click += (_, __) =>
+        {
+            MessageBox.Show(
+                "Datan lisenssi: CC0-lisenssi: ei tekijänoikeutta. Dataa voi lupaa pyytämättä kopioida, muokata, levittää ja esittää, mukaan lukien kaupallisessa tarkoituksessa.\n\n" +
+                "https://elavaarkisto.kokeile.yle.fi/data/\n\n" +
+                "Telkkari 2026",
+                "Tietoja",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
+        };
+
+        asettelu.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        asettelu.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        asettelu.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        Controls.Add(asettelu);
+
+        var painikePaneeli = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+
+        btnTallenna = new Button { Text = "Tallenna", Size = new Size(100, 25), };
+        btnTallenna.Click += BtnTallenna_Click;
+        painikePaneeli.Controls.Add(btnTietoja);
+        painikePaneeli.Controls.Add(btnTallenna);
+        asettelu.Controls.Add(painikePaneeli);
+    }
+
+    private void BtnTallenna_Click(object sender, EventArgs e)
+    {
+        bool vanhaTeema = SovellusAsetukset.TummaTeema;
+
+        SovellusAsetukset.AinaPaalla = chkAinaPaalla.Checked;
+        SovellusAsetukset.TummaTeema = chkTummaTeema.Checked;
+
+        SovellusAsetukset.Tallenna();
+
+        if (Owner != null)
+            Owner.TopMost = SovellusAsetukset.AinaPaalla;
+
+        if (vanhaTeema != SovellusAsetukset.TummaTeema)
+        {
+            var r = MessageBox.Show(
+                "Teeman vaihtaminen vaatii ohjelman uudelleenkäynnistyksen.\n\nKäynnistetäänkö nyt?",
+                "Vaihda teema",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (r == DialogResult.Yes)
+            {
+                Application.Restart();
+                Environment.Exit(0);
+            }
+        }
+
+        Close();
+    }
+}
+
+
+public static class Teema
+{
+    public static readonly Color TummaTausta = Color.FromArgb(24, 24, 24);
+    public static readonly Color TummaPaneeli = Color.FromArgb(32, 32, 32);
+    public static readonly Color TummaTeksti = Color.Gainsboro;
+
+    public static readonly Color ValintaTausta = Color.FromArgb(0, 120, 215);
+    public static readonly Color ValintaTeksti = Color.White;
+
+    public static readonly Color VaaleaTausta = SystemColors.Control;
+    public static readonly Color VaaleaTeksti = SystemColors.ControlText;
+}
+
+public static class SovellusAsetukset
+{
+    public static bool AinaPaalla { get; set; }
+    private static readonly string AsetusTiedosto =
+        Path.Combine(AppContext.BaseDirectory, "asetukset.ini");
+
+    public static bool Asetus1 { get; set; }
+    public static bool Asetus2 { get; set; }
+    public static bool TummaTeema { get; set; }
+
+    public static void Lataa()
+    {
+        Asetus1 = false;
+        Asetus2 = false;
+        AinaPaalla = false;
+    
+        if (!File.Exists(AsetusTiedosto))
+            return;
+
+        foreach (var rivi in File.ReadAllLines(AsetusTiedosto))
+        {
+            var osat = rivi.Split('=', 2);
+            if (osat.Length != 2) continue;
+
+            var avain = osat[0].Trim();
+            var arvo = osat[1].Trim();
+
+            bool.TryParse(arvo, out bool tulos);
+
+            if (avain.Equals("Asetus1", StringComparison.OrdinalIgnoreCase))
+                Asetus1 = tulos;
+            else if (avain.Equals("Asetus2", StringComparison.OrdinalIgnoreCase))
+                Asetus2 = tulos;
+            else if (avain.Equals("AinaPaalla", StringComparison.OrdinalIgnoreCase))
+                AinaPaalla = tulos;
+            else if (avain.Equals("TummaTeema", StringComparison.OrdinalIgnoreCase))
+                TummaTeema = tulos;
+
+        }
+        
+    }
+    public static void Tallenna()
+    {
+        var rivit = new[]
+        {
+            $"AinaPaalla={AinaPaalla}",
+            $"TummaTeema={TummaTeema}"
+        };
+
+        File.WriteAllLines(AsetusTiedosto, rivit, Encoding.UTF8);
     }
 }
