@@ -2,7 +2,7 @@
 TVLR-Selain on Yleisradion TV-lähetysrekisterin selaukseen tarkoitettu ohjelma.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Telkkari/TVLR-Selain/153e680f64dc81bbdea709515f897b2ef2d7b218/kuvat/ohjelma.png" width="900" alt="TVLR-Selain">
+  <img src="https://raw.githubusercontent.com/Telkkari/TVLR-Selain/153e680f64dc81bbdea709515f897b2ef2d7b218/kuvat/ohjelma2.png" width="900" alt="TVLR-Selain">
 </p>
 
 ## Yleistä
@@ -17,7 +17,7 @@ Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
   - Lataa: [https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/9.0.9/windowsdesktop-runtime-9.0.9-win-x64.exe](https://dotnet.microsoft.com/en-us/download/dotnet/9.0/runtime)
 
 ## Mahdollisia lisäyksiä ohjelmaan joskus:
-  - Linux ja Mac tuki (nykyinen WinForms riippuvainen)
+  - Linux ja Mac tuki
   - Elonetin API-rajapinta.
   - Laajentaa ohjelmatietoja ainakin vuoteen 2010.
   - Muiden kanavien ohjelmatietojen lisäys.
