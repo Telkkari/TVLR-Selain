@@ -2,7 +2,7 @@
 TVLR-Selain on Yleisradion TV-lähetysrekisterin selaukseen tarkoitettu ohjelma.
 
 <p align="center">
-  <img src="https://github.com/Telkkari/TVLR-Selain/blob/4ae56650a7929b6d9f48d8383241d41a43d9503f/kuvat/ohjelma2.2.png" width="900" alt="TVLR-Selain">
+  <img src="https://github.com/Telkkari/TVLR-Selain/blob/6c197fbe8f6688278aca27edc0f3c9ba0c7c9061/kuvat/Ohjelma_2.3.png" width="900" alt="TVLR-Selain">
 </p>
 
 ## Yleistä
