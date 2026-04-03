@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -12,30 +11,47 @@ using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Microsoft.VisualBasic.FileIO;
 
+// =====================================================
+// TVLR-Selain 2.3
+// =====================================================
 
 
 internal static class Program
 {
     [STAThread]
+    //Käynnistys
     static void Main()
     {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-        SovellusAsetukset.Lataa();
+            SovellusAsetukset.Lataa();
 
-        ApplicationConfiguration.Initialize();
-        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            ApplicationConfiguration.Initialize();
 
-        Application.Run(new MainForm());
+            Application.Run(new MainForm());
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                ex.ToString(),
+                "Ohjelma kaatui :(",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
+        }
     }
-
 
 }
 
 public class MainForm : Form
 {
+    
+//Teeman asetus
 public void AsetaTeema(Control juuri, bool tumma)
 {
     Color bg = tumma ? Teema.TummaTausta : SystemColors.Control;
@@ -94,6 +110,7 @@ public void AsetaTeema(Control juuri, bool tumma)
 
     TextBox txtHaku;
     ComboBox cboVerkko;
+    ComboBox cboToimitus;
     CheckBox chkInterval;
     DateTimePicker dtpAlku, dtpLoppu;
     CheckBox chkPaiva;
@@ -102,42 +119,80 @@ public void AsetaTeema(Control juuri, bool tumma)
     Button btnAvaa, btnTyhjenna, btnTietoa;
     DataGridView grid;
     Label lblStatus;
+
+    //Hakee kaikki toimitukset "TEKI"
+    private void PopulateToimitusFilter()
+    {
+        var toimitukset = _allRows
+            .Select(r => r.TEKI)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+        //Oletus "Kaikki"
+        toimitukset.Insert(0, "Kaikki");
+
+        cboToimitus.DataSource = toimitukset;
+    }
+
+    
     
 
     private readonly BindingList<TvlrRow> _allRows = new();
     private readonly BindingList<TvlrRow> _viewRows = new();
     private void Grid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
-{
-    if (e.RowIndex < 0 || e.ColumnIndex < 0)
-        return;
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+            return;
 
-    var col = grid.Columns[e.ColumnIndex];
-    if (col.DataPropertyName != nameof(TvlrRow.PaivaStr))
-        return;
+        var col = grid.Columns[e.ColumnIndex];
 
-    if (grid.Rows[e.RowIndex].DataBoundItem is not TvlrRow row)
-        return;
+        if (grid.Rows[e.RowIndex].DataBoundItem is not TvlrRow row)
+            return;
 
-    if (row.Paiva == DateTime.MinValue)
-        return;
+        if (col.DataPropertyName == nameof(TvlrRow.PaivaStr))
+        {
+            if (row.Paiva == DateTime.MinValue)
+                return;
 
-    chkPaiva.Checked = true;
-    chkInterval.Checked = false;
+            chkPaiva.Checked = true;
+            chkInterval.Checked = false;
 
-    dtpPaiva.Value = row.Paiva;
+            dtpPaiva.Value = row.Paiva;
 
-    ApplyFilters();
-}
+            ApplyFilters();
+        }
+        else if (col.DataPropertyName == nameof(TvlrRow.Nimi))
+        {
+            if (string.IsNullOrWhiteSpace(row.Nimi))
+                return;
+
+            txtHaku.Text = row.Nimi;
+
+            ApplyFilters();
+        }
+        else if (col.DataPropertyName == nameof(TvlrRow.TEKI))
+        {
+            if (string.IsNullOrWhiteSpace(row.TEKI))
+                return;
+
+            cboToimitus.SelectedItem = row.TEKI;
+
+            if (cboToimitus.SelectedIndex == -1)
+                cboToimitus.Text = row.TEKI;
+
+            ApplyFilters();
+        }
+    }
 
     public MainForm()
     {
-        
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         TopMost = SovellusAsetukset.AinaPaalla;
-        this.Size = new Size(1400, 720);
+        this.Size = new Size(1630, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        Text = "TVLR-Selain 2.2";
-        MinimumSize = new Size(1200, 720);
-        Icon = SystemIcons.Information;
+        Text = "TVLR-Selain 2.3";
+        MinimumSize = new Size(1630, 250);
 
         var layout = new TableLayoutPanel
         {
@@ -154,8 +209,8 @@ public void AsetaTeema(Control juuri, bool tumma)
         var strip = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            ColumnCount = 9,
-            RowCount = 2,
+            ColumnCount = 10,
+            RowCount = 1,
             AutoSize = true
         };
         
@@ -172,6 +227,13 @@ public void AsetaTeema(Control juuri, bool tumma)
         cboVerkko.Items.AddRange(new object[] { "1 ja 2", "1", "2" });
         cboVerkko.SelectedIndex = 0;
         cboVerkko.SelectedIndexChanged += (_, __) => ApplyFilters();
+
+        cboToimitus = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 240
+        };
+        cboToimitus.SelectedIndexChanged += (_, __) => ApplyFilters();
 
         chkInterval = new CheckBox { Text = "Hae aikavälillä", AutoSize = true };
         chkInterval.CheckedChanged += (_, __) => { UpdateDatePickersEnabled(); ApplyFilters(); };
@@ -196,6 +258,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         {
             txtHaku.Clear();
             cboVerkko.SelectedIndex = 0;
+            cboToimitus.SelectedIndex = 0;
             chkInterval.Checked = false;
             dtpAlku.Value = new DateTime(1985, 1, 1);
             dtpLoppu.Value = new DateTime(1999, 12, 31);
@@ -217,29 +280,30 @@ public void AsetaTeema(Control juuri, bool tumma)
             asetukset.ShowDialog(this);
         };
 
-
-        strip.Controls.Add(new Label { Text = "Avaa data", AutoSize = true }, 0, 0);
+        strip.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        strip.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        strip.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         strip.Controls.Add(new Label { Text = "Haku", AutoSize = true }, 1, 0);
-        strip.Controls.Add(new Label { Text = "Verkko", AutoSize = true }, 2, 0);
-        strip.Controls.Add(new Label { Text = "", AutoSize = true }, 3, 0);
-        strip.Controls.Add(new Label { Text = "Alku pvm", AutoSize = true }, 4, 0);
-        strip.Controls.Add(new Label { Text = "Loppu pvm", AutoSize = true }, 5, 0);
-        strip.Controls.Add(new Label { Text = "", AutoSize = true }, 6, 0);
-        strip.Controls.Add(new Label { Text = "Päivämäärä", AutoSize = true }, 7, 0);
+        strip.Controls.Add(new Label { Text = "Toimitus", AutoSize = true }, 2, 0);
+        strip.Controls.Add(new Label { Text = "Verkko", AutoSize = true }, 3, 0);
+        strip.Controls.Add(new Label { Text = "Alku pvm", AutoSize = true }, 5, 0);
+        strip.Controls.Add(new Label { Text = "Loppu pvm", AutoSize = true }, 6, 0);
+        strip.Controls.Add(new Label { Text = "Päivämäärä", AutoSize = true }, 8, 0);
 
         strip.Controls.Add(btnAvaa, 0, 1);
         strip.Controls.Add(txtHaku, 1, 1);
-        strip.Controls.Add(cboVerkko, 2, 1);
-        strip.Controls.Add(chkInterval, 3, 1);
-        strip.Controls.Add(dtpAlku, 4, 1);
-        strip.Controls.Add(dtpLoppu, 5, 1);
-        strip.Controls.Add(chkPaiva, 6, 1);
-        strip.Controls.Add(dtpPaiva, 7, 1);
+        strip.Controls.Add(cboToimitus, 2, 1);
+        strip.Controls.Add(cboVerkko, 3, 1);
+        strip.Controls.Add(chkInterval, 4, 1);
+        strip.Controls.Add(dtpAlku, 5, 1);
+        strip.Controls.Add(dtpLoppu, 6, 1);
+        strip.Controls.Add(chkPaiva, 7, 1);
+        strip.Controls.Add(dtpPaiva, 8, 1);
 
         var btnPanel = new FlowLayoutPanel { AutoSize = true };
         btnPanel.Controls.Add(btnTyhjenna);
         btnPanel.Controls.Add(btnTietoa);
-        strip.Controls.Add(btnPanel, 8, 1);
+        strip.Controls.Add(btnPanel, 9, 1);
 
         layout.Controls.Add(strip, 0, 0);
 
@@ -405,11 +469,11 @@ public void AsetaTeema(Control juuri, bool tumma)
                 return;
             }
 
-            lblStatus.Text = "Dataa ei löytynyt sovelluskansiosta. Aseta TVLR_combi_publicV1.csv tai tvlahetysrekisteri1985-1999.zip samaan kansioon tai avaa itse.";
+            lblStatus.Text = "Dataa ei löytynyt sovelluskansiosta. Aseta TVLR_combi_publicV1.csv tai tvlahetysrekisteri1985-1999.zip samaan kansioon tai avaa se.";
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Automaattinen lataus epäonnistui:\n" + ex.Message, "Virhe", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, "Lataus epäonnistui:\n" + ex.Message, "Virhe", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -417,6 +481,7 @@ public void AsetaTeema(Control juuri, bool tumma)
     {
         _allRows.Clear();
         foreach (var r in rows) _allRows.Add(r);
+        PopulateToimitusFilter();
         ApplyFilters();
         lblStatus.Text = $"Luettiin {rows.Count:N0} riviä. {(_viewRows.Count == rows.Count ? "Ei suodatusta." : "")}";
     }
@@ -426,7 +491,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         using var ofd = new OpenFileDialog
         {
             Filter = "ZIP tai CSV|*.zip;*.csv",
-            Title = "Valitse Lähetysrekisteri-data (zip tai csv)"
+            Title = "Valitse Lähetysrekisteri-data (.zip tai .csv)"
         };
         if (ofd.ShowDialog(this) == DialogResult.OK)
         {
@@ -448,6 +513,7 @@ public void AsetaTeema(Control juuri, bool tumma)
 
     private void ApplyFilters()
     {
+        var toimitusFilter = cboToimitus.SelectedItem?.ToString() ?? "Kaikki";
         var term = (txtHaku.Text ?? "").Trim();
         var verkkoFilter = cboVerkko.SelectedItem?.ToString() ?? "Kaikki";
 
@@ -483,6 +549,11 @@ public void AsetaTeema(Control juuri, bool tumma)
         if (verkkoFilter == "1" || verkkoFilter == "2")
         {
             q = q.Where(r => r.Verkko == verkkoFilter);
+        }
+
+        if (toimitusFilter != "Kaikki")
+        {
+            q = q.Where(r => r.TEKI == toimitusFilter);
         }
 
         if (useDateFilter)
@@ -549,7 +620,6 @@ public void AsetaTeema(Control juuri, bool tumma)
     {
         var encodings = guessEncodings
             ? new[] {
-                new UTF8Encoding(false),
                 Encoding.UTF8,
                 Encoding.GetEncoding(1252),
                 Encoding.Latin1,
@@ -850,14 +920,10 @@ public static class SovellusAsetukset
     private static readonly string AsetusTiedosto =
         Path.Combine(AppContext.BaseDirectory, "asetukset.ini");
 
-    public static bool Asetus1 { get; set; }
-    public static bool Asetus2 { get; set; }
     public static bool TummaTeema { get; set; }
 
     public static void Lataa()
     {
-        Asetus1 = false;
-        Asetus2 = false;
         AinaPaalla = false;
     
         if (!File.Exists(AsetusTiedosto))
@@ -873,11 +939,7 @@ public static class SovellusAsetukset
 
             bool.TryParse(arvo, out bool tulos);
 
-            if (avain.Equals("Asetus1", StringComparison.OrdinalIgnoreCase))
-                Asetus1 = tulos;
-            else if (avain.Equals("Asetus2", StringComparison.OrdinalIgnoreCase))
-                Asetus2 = tulos;
-            else if (avain.Equals("AinaPaalla", StringComparison.OrdinalIgnoreCase))
+            if (avain.Equals("AinaPaalla", StringComparison.OrdinalIgnoreCase))
                 AinaPaalla = tulos;
             else if (avain.Equals("TummaTeema", StringComparison.OrdinalIgnoreCase))
                 TummaTeema = tulos;
