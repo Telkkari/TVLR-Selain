@@ -16,7 +16,7 @@ https://elavaarkisto.kokeile.yle.fi/data/
 Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
   - Lataa: [https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/9.0.9/windowsdesktop-runtime-9.0.9-win-x64.exe](https://dotnet.microsoft.com/en-us/download/dotnet/9.0/runtime)
 
-## Mahdollisia lisäyksiä ohjelmaan joskus:
+## Mahdollisia lisäyksiä ohjelmaan:
   - Linux ja Mac tuki
   - Elonetin API-rajapinta.
   - Ohjelmatietojen laajennus vuoteen 2008 asti.
