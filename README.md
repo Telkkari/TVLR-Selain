@@ -19,7 +19,7 @@ Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
 ## Mahdollisia lisäyksiä ohjelmaan joskus:
   - Linux ja Mac tuki
   - Elonetin API-rajapinta.
-  - Laajentaa ohjelmatietoja ainakin vuoteen 2010.
+  - Ohjelmatietojen laajennus vuoteen 2008 asti.
   - Muiden kanavien ohjelmatietojen lisäys.
 
 ## Lisenssi
