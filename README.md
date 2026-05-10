@@ -11,6 +11,7 @@ Lähetysrekisteri sisältää kaikki TV1:n ja TV2:n lähetykset vuosilta 1985-19
 
 Lähdedata on peräisin Ylen elävästä arkistosta, telkussa.fi ja arkistoidusta netello.fi sivulta.
 https://elavaarkisto.kokeile.yle.fi/data/
+
 https://telkussa.fi/
 https://web.archive.org/web/20160821021501/http://netello.fi/tv?MODULI_pvm=22012001
 
