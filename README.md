@@ -7,7 +7,8 @@ TVLR-Selain on Yleisradion TV-lähetysrekisterin selausohjelma.
 
 ## Yleistä
 Ohjelma mahdollistaa Yleisradion TV-lähetysrekisterin (1985–1999) sekä vuosien 2001-2007 ohjelmatietojen selauksen ja hakemisen.
-Lähetysrekisteri sisältää kaikki TV1:n ja TV2:n lähetykset vuosilta 1985-1999 ja 2001-2007 sekä MTV:n ohjelmat vuosilta 1985–1992. Lähetysrekisteristä löytyy vuosien 2001-2007 ohjelmatiedot; MTV3, Nelonen, Subtv, Yle Fem, Yle Teema, YLE24, TV Finland, MTV3+, Urheilukanava
+Lähetysrekisteri sisältää kaikki TV1:n ja TV2:n lähetykset vuosilta 1985-1999 ja 2001-2007 sekä MTV:n ohjelmat vuosilta 1985–1992.
+Lähetysrekisteristä löytyy vuosien 2001-2007 ohjelmatiedot; MTV3, Nelonen, Subtv, Yle Fem, Yle Teema, YLE24, TV Finland, MTV3+, Urheilukanava
 
 Lähdedata on peräisin Ylen elävästä arkistosta, telkussa.fi ja arkistoidusta netello.fi sivulta.
 https://elavaarkisto.kokeile.yle.fi/data/
