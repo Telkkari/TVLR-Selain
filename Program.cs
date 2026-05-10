@@ -1,31 +1,30 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
-using System.Globalization;
 using System.IO;
-using System.IO.Compression;
-using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using Microsoft.VisualBasic.FileIO;
+using Microsoft.Data.Sqlite;
+using System.Reflection;
+using System.Runtime.InteropServices;
+
 
 // =====================================================
-// TVLR-Selain 2.3
+// TVLR-Selain 2.4
 // =====================================================
 
 
 internal static class Program
-{
+    {
     [STAThread]
-    //Käynnistys
     static void Main()
     {
+        Application.SetCompatibleTextRenderingDefault(false);
+
+        NativeMethods.SetCurrentProcessExplicitAppUserModelID("TVLRSelain");
+
         try
         {
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
             SovellusAsetukset.Lataa();
 
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -39,18 +38,18 @@ internal static class Program
         {
             MessageBox.Show(
                 ex.ToString(),
-                "Ohjelma kaatui :(",
+                "KAATUI :(",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
         }
     }
-
 }
+
 
 public class MainForm : Form
 {
-    
+
 //Teeman asetus
 public void AsetaTeema(Control juuri, bool tumma)
 {
@@ -91,9 +90,9 @@ public void AsetaTeema(Control juuri, bool tumma)
             cb.ForeColor = tumma ? Teema.TummaTeksti : Color.Black;
             cb.FlatStyle = FlatStyle.Popup;
         }
-        else if (c is CheckBox chk)
+        else if (c is CheckBox)
         {
-            chk.ForeColor = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
+            c.ForeColor = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
         }
         else if (c is DateTimePicker dtp)
         {
@@ -107,7 +106,6 @@ public void AsetaTeema(Control juuri, bool tumma)
     }
 }
 
-
     TextBox txtHaku;
     ComboBox cboVerkko;
     ComboBox cboToimitus;
@@ -120,79 +118,48 @@ public void AsetaTeema(Control juuri, bool tumma)
     DataGridView grid;
     Label lblStatus;
 
-    //Hakee kaikki toimitukset "TEKI"
-    private void PopulateToimitusFilter()
-    {
-        var toimitukset = _allRows
-            .Select(r => r.TEKI)
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Distinct()
-            .OrderBy(s => s)
-            .ToList();
-        //Oletus "Kaikki"
-        toimitukset.Insert(0, "Kaikki");
-
-        cboToimitus.DataSource = toimitukset;
-    }
-
-    
-    
-
-    private readonly BindingList<TvlrRow> _allRows = new();
-    private readonly BindingList<TvlrRow> _viewRows = new();
+    private readonly BindingSource _binding = new();
+    private readonly Timer _searchTimer = new Timer();
     private void Grid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex < 0)
+        if (e.RowIndex < 0)
             return;
-
-        var col = grid.Columns[e.ColumnIndex];
 
         if (grid.Rows[e.RowIndex].DataBoundItem is not TvlrRow row)
             return;
 
-        if (col.DataPropertyName == nameof(TvlrRow.PaivaStr))
+        string kuvaus = GetTietoja(row.DOCN).Trim();
+
+        if (string.IsNullOrWhiteSpace(kuvaus))
         {
-            if (row.Paiva == DateTime.MinValue)
-                return;
-
-            chkPaiva.Checked = true;
-            chkInterval.Checked = false;
-
-            dtpPaiva.Value = row.Paiva;
-
-            ApplyFilters();
+            kuvaus = "Tälle ohjelmalle ei ole kuvausta.";
         }
-        else if (col.DataPropertyName == nameof(TvlrRow.Nimi))
-        {
-            if (string.IsNullOrWhiteSpace(row.Nimi))
-                return;
 
-            txtHaku.Text = row.Nimi;
-
-            ApplyFilters();
-        }
-        else if (col.DataPropertyName == nameof(TvlrRow.TEKI))
-        {
-            if (string.IsNullOrWhiteSpace(row.TEKI))
-                return;
-
-            cboToimitus.SelectedItem = row.TEKI;
-
-            if (cboToimitus.SelectedIndex == -1)
-                cboToimitus.Text = row.TEKI;
-
-            ApplyFilters();
-        }
+        MessageBox.Show(
+            this,
+            kuvaus,
+            row.Nimi,
+            MessageBoxButtons.OK,
+            MessageBoxIcon.None
+        );
     }
-
     public MainForm()
     {
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         TopMost = SovellusAsetukset.AinaPaalla;
         this.Size = new Size(1630, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        Text = "TVLR-Selain 2.3";
+        Text = "TVLR-Selain 2.4";
         MinimumSize = new Size(1630, 250);
+
+        _searchTimer.Interval = 150;
+
+        _searchTimer.Tick += (_, __) =>
+        {
+            _searchTimer.Stop();
+            ApplyFilters();
+        };
+
 
         var layout = new TableLayoutPanel
         {
@@ -221,10 +188,27 @@ public void AsetaTeema(Control juuri, bool tumma)
         btnAvaa.Click += BtnAvaa_Click;
 
         txtHaku = new TextBox { PlaceholderText = "Hae ohjelman nimellä…", Width = 260 };
-        txtHaku.TextChanged += (_, __) => ApplyFilters();
-
+        txtHaku.TextChanged += (_, __) =>
+        {
+            _searchTimer.Stop();
+            _searchTimer.Start();
+        };
         cboVerkko = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
-        cboVerkko.Items.AddRange(new object[] { "1 ja 2", "1", "2" });
+        cboVerkko.Items.AddRange(new object[]
+            {
+                "Kaikki",
+                "YLE TV1",
+                "YLE TV2",
+                "MTV3",
+                "Nelonen",
+                "Subtv",
+                "Yle Fem",
+                "Yle Teema",
+                "YLE24",
+                "TV Finland",
+                "MTV3+",
+                "Urheilukanava"
+            });
         cboVerkko.SelectedIndex = 0;
         cboVerkko.SelectedIndexChanged += (_, __) => ApplyFilters();
 
@@ -285,7 +269,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         strip.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         strip.Controls.Add(new Label { Text = "Haku", AutoSize = true }, 1, 0);
         strip.Controls.Add(new Label { Text = "Toimitus", AutoSize = true }, 2, 0);
-        strip.Controls.Add(new Label { Text = "Verkko", AutoSize = true }, 3, 0);
+        strip.Controls.Add(new Label { Text = "Kanava", AutoSize = true }, 3, 0);
         strip.Controls.Add(new Label { Text = "Alku pvm", AutoSize = true }, 5, 0);
         strip.Controls.Add(new Label { Text = "Loppu pvm", AutoSize = true }, 6, 0);
         strip.Controls.Add(new Label { Text = "Päivämäärä", AutoSize = true }, 8, 0);
@@ -306,7 +290,6 @@ public void AsetaTeema(Control juuri, bool tumma)
         strip.Controls.Add(btnPanel, 9, 1);
 
         layout.Controls.Add(strip, 0, 0);
-
 
         grid = new DataGridView
         {
@@ -334,16 +317,22 @@ public void AsetaTeema(Control juuri, bool tumma)
         grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
         grid.MultiSelect = true;
 
+        typeof(DataGridView)
+            .GetProperty(
+                "DoubleBuffered",
+                BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(grid, true);
+
         AddColumn("Päivä", nameof(TvlrRow.PaivaStr), 85);
         AddColumn("Kello", nameof(TvlrRow.KelloStr), 60);
         AddColumn("Kesto", nameof(TvlrRow.KestoStr), 70);
-        AddColumn("Verkko", nameof(TvlrRow.Verkko), 60);
+        AddColumn("Kanava", nameof(TvlrRow.VerkkoNimi), 100);
         AddColumn("Nimi", nameof(TvlrRow.Nimi), 420, fill: true);
         AddColumn("Tekstitys", nameof(TvlrRow.TEKS), 90);
         AddColumn("Selostus", nameof(TvlrRow.SELO), 90);
         AddColumn("Toimitus", nameof(TvlrRow.TEKI), 160);
         AddColumn("DOCN", nameof(TvlrRow.DOCN), 90);
-        grid.DataSource = _viewRows;
+        grid.DataSource = _binding;
         layout.Controls.Add(grid, 0, 1);
     if (SovellusAsetukset.TummaTeema)
         {
@@ -415,7 +404,6 @@ public void AsetaTeema(Control juuri, bool tumma)
         layout.Controls.Add(lblStatus, 0, 2);
 
         UpdateDatePickersEnabled();
-        UpdateStatus();
 
         TryAutoLoadData();
         if (SovellusAsetukset.TummaTeema)
@@ -429,7 +417,22 @@ public void AsetaTeema(Control juuri, bool tumma)
             this.ForeColor = SystemColors.ControlText;
         }
     }
+    private string GetTietoja(string docn)
+    {
+        if (_conn == null)
+            return "";
 
+        using var cmd = _conn.CreateCommand();
+
+        cmd.CommandText =
+            "SELECT tietoja FROM programs WHERE docn = $docn LIMIT 1";
+
+        cmd.Parameters.AddWithValue("$docn", docn);
+
+        var result = cmd.ExecuteScalar();
+
+        return result?.ToString() ?? "";
+    }
     private void AddColumn(string header, string dataProp, int width, bool fill = false)
     {
         var col = new DataGridViewTextBoxColumn
@@ -441,7 +444,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         };
         grid.Columns.Add(col);
     }
-
+    
     private void UpdateDatePickersEnabled()
     {
         dtpPaiva.Enabled = chkPaiva.Checked;
@@ -449,60 +452,231 @@ public void AsetaTeema(Control juuri, bool tumma)
         dtpAlku.Enabled = intervalEnabled;
         dtpLoppu.Enabled = intervalEnabled;
     }
+    private SqliteConnection? _conn;
 
-    private void TryAutoLoadData()
+    private void LoadFromDatabase(string dbPath)
     {
+
+        _conn?.Dispose();
+
+        _conn = new SqliteConnection($"Data Source={dbPath}");
+        _conn.Open();
+
+        using (var pragma = _conn.CreateCommand())
+        {
+            pragma.CommandText = @"
+                PRAGMA journal_mode = DELETE;
+                PRAGMA synchronous = NORMAL;
+                PRAGMA temp_store = MEMORY;
+                PRAGMA cache_size = -128000;
+            ";
+
+            pragma.ExecuteNonQuery();
+        }
+
+        PopulateToimitusFromDb();
+
         try
         {
-            string baseDir = AppContext.BaseDirectory;
-            string csv = Path.Combine(baseDir, "TVLR_combi_publicV1.csv");
-            string zip = Path.Combine(baseDir, "tvlahetysrekisteri1985-1999.zip");
-
-            if (File.Exists(csv))
-            {
-                LoadIntoGrid(LoadTvlr(csv));
-                return;
-            }
-            if (File.Exists(zip))
-            {
-                LoadIntoGrid(LoadTvlr(zip));
-                return;
-            }
-
-            lblStatus.Text = "Dataa ei löytynyt sovelluskansiosta. Aseta TVLR_combi_publicV1.csv tai tvlahetysrekisteri1985-1999.zip samaan kansioon tai avaa se.";
+            ApplyFilters();
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Lataus epäonnistui:\n" + ex.Message, "Virhe", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(
+                ex.ToString(),
+                "CRASH",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error
+            );
         }
     }
-
-    private void LoadIntoGrid(List<TvlrRow> rows)
+    private void PopulateToimitusFromDb()
     {
-        _allRows.Clear();
-        foreach (var r in rows) _allRows.Add(r);
-        PopulateToimitusFilter();
-        ApplyFilters();
-        lblStatus.Text = $"Luettiin {rows.Count:N0} riviä. {(_viewRows.Count == rows.Count ? "Ei suodatusta." : "")}";
+        if (_conn == null)
+            return;
+
+        var cmd = _conn.CreateCommand();
+
+        cmd.CommandText =
+            "SELECT DISTINCT teki FROM programs WHERE teki != '' ORDER BY teki";
+
+        var list = new List<string> { "Kaikki" };
+
+        using var reader = cmd.ExecuteReader();
+
+        while (reader.Read())
+        {
+            list.Add(reader.GetString(0));
+        }
+
+        cboToimitus.DataSource = list;
+
+        if (cboToimitus.Items.Count > 0)
+            cboToimitus.SelectedIndex = 0;
     }
+    private List<TvlrRow> QueryDatabase()
+        {
+            var list = new List<TvlrRow>();
+
+            if (_conn == null)
+                return list;
+
+            var cmd = _conn.CreateCommand();
+
+            var sql = @"
+            SELECT
+                docn,
+                nimi,
+                pvm,
+                kello,
+                kesto,
+                verkko,
+                teks,
+                selo,
+                teki
+            FROM programs
+            WHERE 1=1
+            ";
+
+            var term = txtHaku.Text.Trim();
+            var verkko = cboVerkko.SelectedItem?.ToString();
+            var toimitus = cboToimitus.SelectedItem?.ToString() ?? "Kaikki";
+
+            if (!string.IsNullOrWhiteSpace(term) && term.Length >= 2)
+            {
+                sql += " AND nimi LIKE $term";
+                cmd.Parameters.AddWithValue("$term", term + "%");
+            }
+
+            if (!string.IsNullOrWhiteSpace(verkko) && verkko != "Kaikki")
+            {
+                string verkkoNumero = verkko switch
+                {
+                    "YLE TV1" => "1",
+                    "YLE TV2" => "2",
+                    "MTV3" => "3",
+                    "Nelonen" => "4",
+                    "Subtv" => "6",
+                    "Yle Fem" => "13",
+                    "Yle Teema" => "14",
+                    "YLE24" => "15",
+                    "TV Finland" => "22",
+                    "MTV3+" => "30",
+                    "Urheilukanava" => "31",
+                    _ => verkko
+                };
+
+                sql += " AND verkko = $verkko";
+                cmd.Parameters.AddWithValue("$verkko", verkkoNumero);
+            }
+
+            if (!string.IsNullOrEmpty(toimitus) && toimitus != "Kaikki")
+            {
+                sql += " AND teki = $teki";
+                cmd.Parameters.AddWithValue("$teki", toimitus);
+            }
+
+            if (chkPaiva.Checked)
+            {
+                sql += " AND pvm = $pvm";
+                cmd.Parameters.AddWithValue("$pvm", dtpPaiva.Value.Date);
+            }
+            else if (chkInterval.Checked)
+            {
+                sql += " AND pvm BETWEEN $start AND $end";
+                cmd.Parameters.AddWithValue("$start", dtpAlku.Value.Date);
+                cmd.Parameters.AddWithValue("$end", dtpLoppu.Value.Date);
+            }
+
+            sql += " ORDER BY pvm, kello, nimi";
+
+            cmd.CommandText = sql;
+
+            using var reader = cmd.ExecuteReader();
+
+            while (reader.Read())
+            {
+                DateTime paiva = DateTime.MinValue;
+
+                DateTime.TryParse(
+                    reader["pvm"]?.ToString(),
+                    out paiva
+                );
+
+                int kesto = 0;
+
+                int.TryParse(
+                    reader["kesto"]?.ToString(),
+                    out kesto
+                );
+
+                var row = new TvlrRow
+                {
+                    DOCN = reader["docn"]?.ToString() ?? "",
+
+                    Nimi = reader["nimi"]?.ToString() ?? "",
+
+                    Paiva = paiva,
+
+                    KelloTimeSpan = ParseTime(
+                        reader["kello"]?.ToString() ?? ""
+                    ),
+
+                    KestoTimeSpan = TimeSpan.FromSeconds(kesto),
+
+                    Verkko = reader["verkko"]?.ToString() ?? "",
+
+                    TEKS = reader["teks"]?.ToString() ?? "",
+
+                    SELO = reader["selo"]?.ToString() ?? "",
+
+                    TEKI = reader["teki"]?.ToString() ?? ""
+                };
+
+                list.Add(row);
+            }
+
+            return list;
+        }
+
+    private TimeSpan? ParseTime(string s)
+    {
+        if (TimeSpan.TryParse(s, out var t))
+            return t;
+        return null;
+    }
+    private void TryAutoLoadData()
+    {
+        string db = Path.Combine(AppContext.BaseDirectory, "TVLR.db");
+
+        if (File.Exists(db))
+        {
+            LoadFromDatabase(db);
+            return;
+        }
+
+        lblStatus.Text = "TVLR.db ei löytynyt.";
+    }
+
 
     private void BtnAvaa_Click(object? sender, EventArgs e)
     {
         using var ofd = new OpenFileDialog
         {
-            Filter = "ZIP tai CSV|*.zip;*.csv",
-            Title = "Valitse Lähetysrekisteri-data (.zip tai .csv)"
+            Filter = "SQLite DB (*.db)|*.db",
+            Title = "Valitse tietokanta (.db)"
         };
+
         if (ofd.ShowDialog(this) == DialogResult.OK)
         {
             try
             {
                 Cursor = Cursors.WaitCursor;
-                LoadIntoGrid(LoadTvlr(ofd.FileName));
+                LoadFromDatabase(ofd.FileName);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Virhe datan lukemisessa:\n" + ex.Message, "Virhe", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, "Virhe:\n" + ex.Message);
             }
             finally
             {
@@ -513,257 +687,19 @@ public void AsetaTeema(Control juuri, bool tumma)
 
     private void ApplyFilters()
     {
-        var toimitusFilter = cboToimitus.SelectedItem?.ToString() ?? "Kaikki";
-        var term = (txtHaku.Text ?? "").Trim();
-        var verkkoFilter = cboVerkko.SelectedItem?.ToString() ?? "Kaikki";
+        var rows = QueryDatabase();
 
-        DateTime start, end;
-        bool useDateFilter = false;
+        _binding.DataSource = rows;
 
-        if (chkPaiva.Checked)
-        {
-            start = dtpPaiva.Value.Date;
-            end = start;
-            useDateFilter = true;
-        }
-        else if (chkInterval.Checked)
-        {
-            start = dtpAlku.Value.Date;
-            end = dtpLoppu.Value.Date;
-            useDateFilter = true;
-        }
-        else
-        {
-            start = DateTime.MinValue.Date;
-            end = DateTime.MaxValue.Date;
-        }
-
-        IEnumerable<TvlrRow> q = _allRows;
-
-        if (!string.IsNullOrWhiteSpace(term))
-        {
-            var t = term.ToLowerInvariant();
-            q = q.Where(r => (r.Nimi ?? "").ToLowerInvariant().Contains(t));
-        }
-
-        if (verkkoFilter == "1" || verkkoFilter == "2")
-        {
-            q = q.Where(r => r.Verkko == verkkoFilter);
-        }
-
-        if (toimitusFilter != "Kaikki")
-        {
-            q = q.Where(r => r.TEKI == toimitusFilter);
-        }
-
-        if (useDateFilter)
-        {
-            q = q.Where(r => r.Paiva >= start && r.Paiva <= end);
-        }
-
-        var arr = q.OrderBy(r => r.Paiva)
-                   .ThenBy(r => r.KelloTimeSpan ?? TimeSpan.Zero)
-                   .ThenBy(r => r.Nimi)
-                   .ToArray();
-
-        _viewRows.RaiseListChangedEvents = false;
-        _viewRows.Clear();
-        foreach (var r in arr) _viewRows.Add(r);
-        _viewRows.RaiseListChangedEvents = true;
-        _viewRows.ResetBindings();
-
-        UpdateStatus();
-    }
-
-    private void UpdateStatus()
-    {
-        string rangeText = chkPaiva.Checked
-            ? $"Päivämäärä: {dtpPaiva.Value:dd.MM.yyyy}"
-            : (chkInterval.Checked
-                ? $"Aikaväli: {dtpAlku.Value:dd.MM.yyyy} – {dtpLoppu.Value:dd.MM.yyyy}"
-                : "Ei päivämääräsuodatusta");
-
-        lblStatus.Text = _allRows.Count == 0
-            ? "Lataa data automaattisesti tai avaa tiedosto."
-            : $"Näytetään {_viewRows.Count:N0}/{_allRows.Count:N0} ohjelmaa. {rangeText}.";
-    }
-
-    private List<TvlrRow> LoadTvlr(string path)
-    {
-        if (path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-        {
-            using var zip = ZipFile.OpenRead(path);
-            var entry = zip.Entries
-                .Where(e => !string.IsNullOrEmpty(e.Name))
-                .OrderByDescending(e => e.FullName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-                .ThenByDescending(e => e.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-                .FirstOrDefault();
-            if (entry == null) throw new InvalidOperationException("ZIP-arkistossa ei ole csv-tiedostoja.");
-
-            using var s = entry.Open();
-            using var mem = new MemoryStream();
-            s.CopyTo(mem);
-            mem.Position = 0;
-            return LoadTvlrFromStream(mem, guessEncodings: true);
-        }
-        else
-        {
-            using var fs = File.OpenRead(path);
-            using var mem = new MemoryStream();
-            fs.CopyTo(mem);
-            mem.Position = 0;
-            return LoadTvlrFromStream(mem, guessEncodings: true);
-        }
-    }
-
-    private List<TvlrRow> LoadTvlrFromStream(Stream stream, bool guessEncodings)
-    {
-        var encodings = guessEncodings
-            ? new[] {
-                Encoding.UTF8,
-                Encoding.GetEncoding(1252),
-                Encoding.Latin1,
-                Encoding.GetEncoding(28605)
-              }
-            : new[] { Encoding.UTF8 };
-
-        foreach (var enc in encodings)
-        {
-            stream.Position = 0;
-            try
-            {
-                using var parser = new TextFieldParser(stream, enc, detectEncoding: true)
-                {
-                    TextFieldType = FieldType.Delimited,
-                    Delimiters = new[] { "," },
-                    HasFieldsEnclosedInQuotes = true,
-                    TrimWhiteSpace = false
-                };
-                var rows = ParseRows(parser);
-                if (rows.Count > 0) return rows;
-            }
-            catch
-            {
-
-            }
-        }
-        return new List<TvlrRow>();
-    }
-
-    private List<TvlrRow> ParseRows(TextFieldParser parser)
-    {
-        var list = new List<TvlrRow>(200_000);
-        bool headerSkipped = false;
-
-        while (!parser.EndOfData)
-        {
-            string[]? parts = parser.ReadFields();
-            if (parts == null) continue;
-
-            if (!headerSkipped && parts.Length >= 2 && parts[0].Equals("DOCN", StringComparison.OrdinalIgnoreCase))
-            {
-                headerSkipped = true;
-                continue;
-            }
-            headerSkipped = true;
-
-            if (parts.Length < 8)
-            {
-                Array.Resize(ref parts, 8);
-                for (int i = 0; i < 8; i++) parts[i] ??= string.Empty;
-            }
-            else if (parts.Length > 8)
-            {
-                parts[7] = string.Join(",", parts.Skip(7));
-                Array.Resize(ref parts, 8);
-            }
-
-            var row = new TvlrRow
-            {
-                DOCN     = (parts[0] ?? "").Trim(),
-                Nimi     = (parts[1] ?? "").Trim(),
-                KEST_raw = (parts[2] ?? "").Trim(),
-                LPVM_raw = (parts[3] ?? "").Trim(),
-                TEKS     = (parts[4] ?? "").Trim(),
-                SELO     = (parts[5] ?? "").Trim(),
-                LISA     = (parts[6] ?? "").Trim(),
-                TEKI     = (parts[7] ?? "").Trim()
-            };
-
-            row.Paiva         = ParseDateYyyyMmDd(row.LPVM_raw) ?? DateTime.MinValue;
-            row.KelloTimeSpan = ExtractTimeFromLISA(row.LISA);
-            row.Verkko        = ExtractVerkkoFromLISA(row.LISA);
-            row.KestoTimeSpan = ParseMmmss(row.KEST_raw);
-
-            list.Add(row);
-        }
-        return list;
-    }
-
-    private static DateTime? ParseDateYyyyMmDd(string s)
-    {
-        if (DateTime.TryParseExact(s, new[] { "yyyyMMdd", "yyyy-MM-dd" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
-            return dt.Date;
-        return null;
-    }
-
-    private static TimeSpan? ParseMmmss(string s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return null;
-        var digits = new string(s.Where(char.IsDigit).ToArray());
-        if (digits.Length < 3) return null;
-
-        string secStr = digits[^2..];
-        string minStr = digits[..^2];
-
-        if (!int.TryParse(secStr, NumberStyles.None, CultureInfo.InvariantCulture, out int ss)) return null;
-        if (!long.TryParse(minStr, NumberStyles.None, CultureInfo.InvariantCulture, out long mm)) return null;
-
-        ss = Math.Clamp(ss, 0, 59);
-        if (mm < 0) mm = 0;
-
-        double totalSeconds = mm * 60.0 + ss;
-        try { return TimeSpan.FromSeconds(totalSeconds); }
-        catch { return TimeSpan.MaxValue; }
-    }
-
-    private static TimeSpan? ExtractTimeFromLISA(string lisa)
-    {
-        if (string.IsNullOrEmpty(lisa)) return null;
-        var m = Regex.Match(lisa, @"Kello:\s*(\d{1,2}):(\d{1,2})");
-        if (m.Success)
-        {
-            int hh = int.TryParse(m.Groups[1].Value, out var h) ? Math.Clamp(h, 0, 23) : 0;
-            int mm = int.TryParse(m.Groups[2].Value, out var mi) ? Math.Clamp(mi, 0, 59) : 0;
-            return new TimeSpan(hh, mm, 0);
-        }
-        return null;
-    }
-
-    private static string ExtractVerkkoFromLISA(string lisa)
-    {
-        if (string.IsNullOrEmpty(lisa)) return "";
-        var m = Regex.Match(lisa, @"Verkko:\s*(\d)");
-        if (m.Success)
-        {
-            var v = m.Groups[1].Value;
-            if (v is "1" or "2") return v;
-        }
-        if (lisa.Contains("TV1", StringComparison.OrdinalIgnoreCase)) return "1";
-        if (lisa.Contains("TV2", StringComparison.OrdinalIgnoreCase)) return "2";
-        return "";
+        lblStatus.Text = $"Näytetään {rows.Count:N0} ohjelmaa.";
     }
 }
-
 public class TvlrRow
 {
     public string DOCN { get; set; } = "";
     public string Nimi { get; set; } = "";
-    public string KEST_raw { get; set; } = "";
-    public string LPVM_raw { get; set; } = "";
     public string TEKS { get; set; } = "";
     public string SELO { get; set; } = "";
-    public string LISA { get; set; } = "";
     public string TEKI { get; set; } = "";
 
     public DateTime Paiva { get; set; } = DateTime.MinValue;
@@ -771,13 +707,35 @@ public class TvlrRow
     public TimeSpan? KestoTimeSpan { get; set; }
     public string Verkko { get; set; } = "";
 
+    public string VerkkoNimi
+    {
+        get
+        {
+            return Verkko switch
+            {
+                "1" => "YLE TV1",
+                "2" => "YLE TV2",
+                "3" => "MTV3",
+                "4" => "Nelonen",
+                "6" => "Subtv",
+                "13" => "Yle Fem",
+                "14" => "Yle Teema",
+                "15" => "YLE24",
+                "22" => "TV Finland",
+                "30" => "MTV3+",
+                "31" => "Urheilukanava",
+                _ => Verkko
+            };
+        }
+    }
+
     public string PaivaStr => Paiva == DateTime.MinValue ? "" : Paiva.ToString("dd.MM.yyyy");
     public string KelloStr => KelloTimeSpan.HasValue ? $"{(int)KelloTimeSpan.Value.TotalHours:00}:{KelloTimeSpan.Value.Minutes:00}" : "";
     public string KestoStr
     {
         get
         {
-            if (KestoTimeSpan == null || KestoTimeSpan == TimeSpan.MaxValue) return "";
+            if (KestoTimeSpan == null) return "";
             var t = KestoTimeSpan.Value;
             return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
         }
@@ -789,8 +747,6 @@ public class AsetuksetForm : Form
     CheckBox chkAinaPaalla;
     CheckBox chkTummaTeema;
     Button btnTietoja;
-
-
 
     public AsetuksetForm()
     {
@@ -827,9 +783,6 @@ public class AsetuksetForm : Form
 
 
         asettelu.Controls.Add(chkAinaPaalla);
-        SovellusAsetukset.TummaTeema = chkTummaTeema.Checked;
-        if (Owner is MainForm mf)
-            mf.AsetaTeema(mf, SovellusAsetukset.TummaTeema);
         btnTietoja = new Button
         {
             Text = "Tietoja",
@@ -900,7 +853,6 @@ public class AsetuksetForm : Form
     }
 }
 
-
 public static class Teema
 {
     public static readonly Color TummaTausta = Color.FromArgb(24, 24, 24);
@@ -913,19 +865,21 @@ public static class Teema
     public static readonly Color VaaleaTausta = SystemColors.Control;
     public static readonly Color VaaleaTeksti = SystemColors.ControlText;
 }
-
+static class NativeMethods
+{
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    public static extern int SetCurrentProcessExplicitAppUserModelID(string AppID);
+}
 public static class SovellusAsetukset
 {
     public static bool AinaPaalla { get; set; }
+    public static bool TummaTeema { get; set; }
+
     private static readonly string AsetusTiedosto =
         Path.Combine(AppContext.BaseDirectory, "asetukset.ini");
 
-    public static bool TummaTeema { get; set; }
-
     public static void Lataa()
     {
-        AinaPaalla = false;
-    
         if (!File.Exists(AsetusTiedosto))
             return;
 
@@ -937,15 +891,17 @@ public static class SovellusAsetukset
             var avain = osat[0].Trim();
             var arvo = osat[1].Trim();
 
-            bool.TryParse(arvo, out bool tulos);
-
             if (avain.Equals("AinaPaalla", StringComparison.OrdinalIgnoreCase))
-                AinaPaalla = tulos;
+            {
+                if (bool.TryParse(arvo, out bool tulos))
+                    AinaPaalla = tulos;
+            }
             else if (avain.Equals("TummaTeema", StringComparison.OrdinalIgnoreCase))
-                TummaTeema = tulos;
-
+            {
+                if (bool.TryParse(arvo, out bool tulos))
+                    TummaTeema = tulos;
+            }
         }
-        
     }
     public static void Tallenna()
     {
