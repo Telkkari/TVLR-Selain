@@ -2,15 +2,17 @@
 TVLR-Selain on Yleisradion TV-lähetysrekisterin selausohjelma.
 
 <p align="center">
-  <img src="https://github.com/Telkkari/TVLR-Selain/blob/6c197fbe8f6688278aca27edc0f3c9ba0c7c9061/kuvat/Ohjelma_2.3.png" width="900" alt="TVLR-Selain">
+  <img src="https://github.com/Telkkari/TVLR-Selain/blob/fb4f297fedb5bd4a5ae08ee014f391b4efc7eeee/TVLR-Selain%202.4.png" width="900" alt="TVLR-Selain">
 </p>
 
 ## Yleistä
-Ohjelma mahdollistaa Yleisradion TV-lähetysrekisterin (1985–1999) ohjelmatietojen selauksen ja hakemisen.
-Lähetysrekisteri sisältää kaikki TV1:n ja TV2:n lähetykset kyseisiltä vuosilta sekä MTV:n ohjelmat vuosilta 1985–1992.
+Ohjelma mahdollistaa Yleisradion TV-lähetysrekisterin (1985–1999) sekä vuosien 2001-2007 ohjelmatietojen selauksen ja hakemisen.
+Lähetysrekisteri sisältää kaikki TV1:n ja TV2:n lähetykset vuosilta 1985-1999 ja 2001-2007 sekä MTV:n ohjelmat vuosilta 1985–1992. Lähetysrekisteristä myös löytyy vuosien 2001-2007 ohjelmatiedot; MTV3, Nelonen, Subtv, Yle Fem, Yle Teema, YLE24, TV Finland, MTV3+, Urheilukanava
 
-Lähdedata on peräisin Ylen elävästä arkistosta.
+Lähdedata on peräisin Ylen elävästä arkistosta, telkussa.fi ja arkistoidusta netello.fi sivulta.
 https://elavaarkisto.kokeile.yle.fi/data/
+https://telkussa.fi/
+https://web.archive.org/web/20160821021501/http://netello.fi/tv?MODULI_pvm=22012001
 
 
 Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
@@ -18,9 +20,6 @@ Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.
 
 ## Mahdollisia lisäyksiä ohjelmaan:
   - Linux ja Mac tuki
-  - Elonetin API-rajapinta.
-  - Ohjelmatietojen laajennus vuoteen 2008 asti.
-  - Muiden kanavien ohjelmatietojen lisäys.
 
 ## Lisenssi
 
