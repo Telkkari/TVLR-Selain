@@ -1,5 +1,5 @@
 # TVLR-Selain
-TVLR-Selain on Yleisradion TV-lähetysrekisterin selausohjelma.
+TVLR-Selain on lähetysrekisterin selausohjelma.
 
 <p align="center">
   <img src="https://github.com/Telkkari/TVLR-Selain/blob/fb4f297fedb5bd4a5ae08ee014f391b4efc7eeee/TVLR-Selain%202.4.png" width="900" alt="TVLR-Selain">
