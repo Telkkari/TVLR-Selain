@@ -18,6 +18,8 @@ https://telkussa.fi/
 
 https://web.archive.org/web/20160821021501/http://netello.fi/tv?MODULI_pvm=22012001
 
+https://files.mpoli.fi/software/TEXTS/TV-RADIO/
+
 
 **Ohjelma vaatii .NET Desktop Runtime 9.0 asennuksen.**
   - Lataa: [https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/9.0.9/windowsdesktop-runtime-9.0.9-win-x64.exe](https://dotnet.microsoft.com/en-us/download/dotnet/9.0/runtime)
