@@ -7,31 +7,27 @@ using System.Windows.Forms;
 using Microsoft.Data.Sqlite;
 using System.Reflection;
 using System.Runtime.InteropServices;
-
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Linq;
 
 // =====================================================
-// TVLR-Selain 2.4
+// TVLR-Selain 2.5
 // =====================================================
-
 
 internal static class Program
     {
     [STAThread]
     static void Main()
     {
-        Application.SetCompatibleTextRenderingDefault(false);
-
         NativeMethods.SetCurrentProcessExplicitAppUserModelID("TVLRSelain");
-
         try
         {
             SovellusAsetukset.Lataa();
-
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
             ApplicationConfiguration.Initialize();
-
             Application.Run(new MainForm());
         }
         catch (Exception ex)
@@ -46,66 +42,8 @@ internal static class Program
     }
 }
 
-
 public class MainForm : Form
 {
-
-//Teeman asetus
-public void AsetaTeema(Control juuri, bool tumma)
-{
-    Color bg = tumma ? Teema.TummaTausta : SystemColors.Control;
-    Color fg = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
-
-    if (juuri is Form or Panel or TableLayoutPanel or FlowLayoutPanel)
-    {
-        juuri.BackColor = bg;
-        juuri.ForeColor = fg;
-    }
-
-    foreach (Control c in juuri.Controls)
-    {
-        if (c is DataGridView)
-            continue;
-        if (c is TableLayoutPanel or FlowLayoutPanel)
-            c.BackColor = tumma ? Teema.TummaTausta : SystemColors.Control;
-        if (c is Label or CheckBox or RadioButton)
-        {
-            c.BackColor = bg;
-            c.ForeColor = fg;
-        }
-        else if (c is TextBox tb)
-        {
-            tb.BackColor = tumma ? Color.FromArgb(32, 32, 32) : Color.White;
-            tb.ForeColor = tumma ? Teema.TummaTeksti : Color.Black;
-        }
-        else if (c is Button b)
-        {
-            b.UseVisualStyleBackColor = false;
-            b.BackColor = tumma ? Color.FromArgb(45, 45, 45) : SystemColors.Control;
-            b.ForeColor = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
-        }
-        else if (c is ComboBox cb)
-        {
-            cb.BackColor = tumma ? Color.FromArgb(32, 32, 32) : Color.White;
-            cb.ForeColor = tumma ? Teema.TummaTeksti : Color.Black;
-            cb.FlatStyle = FlatStyle.Popup;
-        }
-        else if (c is CheckBox)
-        {
-            c.ForeColor = tumma ? Teema.TummaTeksti : SystemColors.ControlText;
-        }
-        else if (c is DateTimePicker dtp)
-        {
-            if (tumma)
-            {
-                dtp.CalendarMonthBackground = Teema.TummaTausta;
-                dtp.CalendarForeColor = Teema.TummaTeksti;
-            }
-        }
-        AsetaTeema(c, tumma);
-    }
-}
-
     TextBox txtHaku;
     ComboBox cboVerkko;
     ComboBox cboToimitus;
@@ -113,14 +51,25 @@ public void AsetaTeema(Control juuri, bool tumma)
     DateTimePicker dtpAlku, dtpLoppu;
     CheckBox chkPaiva;
     DateTimePicker dtpPaiva;
-
-    Button btnAvaa, btnTyhjenna, btnTietoa;
+    Button btnAvaa, btnTyhjenna, btnTietoa, btnPaivita;
     DataGridView grid;
     Label lblStatus;
 
     private readonly BindingSource _binding = new();
-    private readonly Timer _searchTimer = new Timer();
-    private void Grid_CellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+
+    // Viivyttää tietokantakyselyiden suorittamista jokaisella painalluksella
+    private readonly System.Windows.Forms.Timer _searchTimer =
+    new System.Windows.Forms.Timer();
+
+    // Yhteinen HttpClient päivitysten tarkistamiseen ja lataamiseen (Refit olis ehkä parempi?)
+    private static readonly HttpClient Http = new()
+    {
+        Timeout = TimeSpan.FromSeconds(15)
+    };
+
+    // Päivämäärää tai kanavaa tuplaklikkaamallaa asettaa haun suodatuksen kyseisen kanavan päivämäärälle.
+    // Muuten näytetään ohjelman kuvaus.
+    private void Grid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex < 0)
             return;
@@ -128,7 +77,18 @@ public void AsetaTeema(Control juuri, bool tumma)
         if (grid.Rows[e.RowIndex].DataBoundItem is not TvlrRow row)
             return;
 
-        string kuvaus = GetTietoja(row.DOCN).Trim();
+        if (e.ColumnIndex == 0 || e.ColumnIndex == 3)
+        {
+            txtHaku.Clear();
+            cboVerkko.SelectedItem = row.VerkkoNimi;
+            chkInterval.Checked = false;
+            chkPaiva.Checked = true;
+            dtpPaiva.Value = row.Paiva.Date;
+            ApplyFilters();
+            return;
+        }
+
+        string kuvaus = row.TIETOJA.Trim();
 
         if (string.IsNullOrWhiteSpace(kuvaus))
         {
@@ -147,19 +107,20 @@ public void AsetaTeema(Control juuri, bool tumma)
     {
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         TopMost = SovellusAsetukset.AinaPaalla;
-        this.Size = new Size(1630, 720);
+        this.Size = new Size(1835, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        Text = "TVLR-Selain 2.4";
-        MinimumSize = new Size(1630, 250);
+        Text = "TVLR-Selain 2.5";
+        MinimumSize = new Size(1630, 300);
 
-        _searchTimer.Interval = 150;
+        _searchTimer.Interval = 50; //ms
 
+        // Suoritetaan haku pienellä viiveellä, jotta tulosten näyttäminen ei olisi raskasta. (ehkä turha kun "lazy loading" käytös?)
+        // Varmuuden vuoks jätän, mut pienensin aikaa
         _searchTimer.Tick += (_, __) =>
         {
             _searchTimer.Stop();
             ApplyFilters();
         };
-
 
         var layout = new TableLayoutPanel
         {
@@ -184,7 +145,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         for (int i = 0; i < strip.ColumnCount; i++)
             strip.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-        btnAvaa = new Button { Text = "Avaa data…", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
+        btnAvaa = new Button { Text = "Avaa tietokanta", AutoSize = true, Padding = new Padding(10, 6, 10, 6) };
         btnAvaa.Click += BtnAvaa_Click;
 
         txtHaku = new TextBox { PlaceholderText = "Hae ohjelman nimellä…", Width = 260 };
@@ -219,7 +180,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         };
         cboToimitus.SelectedIndexChanged += (_, __) => ApplyFilters();
 
-        chkInterval = new CheckBox { Text = "Hae aikavälillä", AutoSize = true };
+        chkInterval = new CheckBox { Text = "Hae päivämäärävälillä", AutoSize = true };
         chkInterval.CheckedChanged += (_, __) => { UpdateDatePickersEnabled(); ApplyFilters(); };
 
         dtpAlku = new DateTimePicker { Format = DateTimePickerFormat.Custom, CustomFormat = "dd.MM.yyyy", Width = 120 };
@@ -250,6 +211,15 @@ public void AsetaTeema(Control juuri, bool tumma)
             dtpPaiva.Value = new DateTime(1999, 12, 31);
             ApplyFilters();
         };
+
+        btnPaivita = new Button
+        {
+            Text = "Tarkista päivitykset",
+            AutoSize = true,
+            Padding = new Padding(10, 6, 10, 6)
+        };
+
+        btnPaivita.Click += BtnPaivita_Click;
             
         btnTietoa = new Button
         {
@@ -286,37 +256,63 @@ public void AsetaTeema(Control juuri, bool tumma)
 
         var btnPanel = new FlowLayoutPanel { AutoSize = true };
         btnPanel.Controls.Add(btnTyhjenna);
+        btnPanel.Controls.Add(btnPaivita);
         btnPanel.Controls.Add(btnTietoa);
         strip.Controls.Add(btnPanel, 9, 1);
 
         layout.Controls.Add(strip, 0, 0);
 
+        // Dataruudukko ohjelmatietojen näyttämiseen
+
         grid = new DataGridView
         {
-            
             Dock = DockStyle.Fill,
             ReadOnly = true,
             AllowUserToAddRows = false,
             AutoGenerateColumns = false,
-            SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
-            {
-                BackColor = Color.FromArgb(248, 248, 248)
-            },
+
+            RowHeadersVisible = false,
+
+            AlternatingRowsDefaultCellStyle =
+                new DataGridViewCellStyle
+                {
+                    BackColor = Color.FromArgb(248, 248, 248)
+                },
+
             BorderStyle = BorderStyle.None,
-            CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-            ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
-            {
-                Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
-                WrapMode = DataGridViewTriState.False
-            }
+
+            CellBorderStyle =
+                DataGridViewCellBorderStyle.SingleHorizontal,
+
+            ColumnHeadersDefaultCellStyle =
+                new DataGridViewCellStyle
+                {
+                    Font = new Font(
+                        SystemFonts.DefaultFont,
+                        FontStyle.Bold),
+
+                    WrapMode =
+                        DataGridViewTriState.False
+                }
         };
         grid.CellDoubleClick += Grid_CellDoubleClick;
+        grid.Scroll += Grid_Scroll;
         grid.ClipboardCopyMode =
             DataGridViewClipboardCopyMode.EnableWithoutHeaderText;
         grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
         grid.MultiSelect = true;
 
+        grid.AutoSizeColumnsMode =
+            DataGridViewAutoSizeColumnsMode.None;
+
+        grid.AutoSizeRowsMode =
+            DataGridViewAutoSizeRowsMode.None;
+
+        grid.AllowUserToOrderColumns = false;
+
+        grid.StandardTab = true;
+
+        // Vähentää DataGridView:n välkkymistä
         typeof(DataGridView)
             .GetProperty(
                 "DoubleBuffered",
@@ -334,6 +330,8 @@ public void AsetaTeema(Control juuri, bool tumma)
         AddColumn("DOCN", nameof(TvlrRow.DOCN), 90);
         grid.DataSource = _binding;
         layout.Controls.Add(grid, 0, 1);
+
+    // Tumma ja vaalea teema 
     if (SovellusAsetukset.TummaTeema)
         {
             grid.EnableHeadersVisualStyles = false;
@@ -400,7 +398,6 @@ public void AsetaTeema(Control juuri, bool tumma)
             TabStop = false
         };
 
-
         layout.Controls.Add(lblStatus, 0, 2);
 
         UpdateDatePickersEnabled();
@@ -416,22 +413,188 @@ public void AsetaTeema(Control juuri, bool tumma)
             this.BackColor = SystemColors.Control;
             this.ForeColor = SystemColors.ControlText;
         }
+        if (SovellusAsetukset.AutoPaivitys)
+        {
+            Shown += async (_, __) =>
+            {
+                await Task.Delay(1000);
+
+                BtnPaivita_Click(null, EventArgs.Empty);
+            };
+        }
     }
-    private string GetTietoja(string docn)
+    // Lazy loading -asetukset
+    // Ohjelmatietoja ladataan lisää vasta scrollattaessa
+    private int _loadedRows = 0;
+
+    private const int PageSize = 5000;
+
+    private bool _loadingMore = false;
+
+    private async void Grid_Scroll(
+        object sender,
+        ScrollEventArgs e)
     {
-        if (_conn == null)
-            return "";
+        if (_loadingMore)
+            return;
 
-        using var cmd = _conn.CreateCommand();
+        if (grid.RowCount == 0)
+            return;
 
-        cmd.CommandText =
-            "SELECT tietoja FROM programs WHERE docn = $docn LIMIT 1";
+        int visible =
+            grid.DisplayedRowCount(false);
 
-        cmd.Parameters.AddWithValue("$docn", docn);
+        int first =
+            grid.FirstDisplayedScrollingRowIndex;
 
-        var result = cmd.ExecuteScalar();
+        if (first + visible >= grid.RowCount - 50)
+        {
+            _loadingMore = true;
 
-        return result?.ToString() ?? "";
+            try
+            {
+                lblStatus.Text =
+                    "Ladataan lisää...";
+
+                var moreRows =
+                    await Task.Run(() =>
+                        QueryDatabase(
+                            PageSize,
+                            _loadedRows));
+
+                if (moreRows.Count > 0)
+                {
+                    var current =
+                        (List<TvlrRow>)
+                        _binding.DataSource;
+
+                int scrollPos =
+                    grid.FirstDisplayedScrollingRowIndex;
+
+                current.AddRange(moreRows);
+
+                _binding.ResetBindings(false);
+
+                if (scrollPos >= 0 &&
+                    scrollPos < grid.RowCount)
+                {
+                    grid.FirstDisplayedScrollingRowIndex =
+                        scrollPos;
+                }
+
+                _loadedRows += moreRows.Count;
+                }
+
+            lblStatus.Text =
+                $"Näytetään {_loadedRows:N0} ohjelmaa ({_totalRows:N0} yhteensä).";
+            }
+            finally
+            {
+                _loadingMore = false;
+            }
+        }
+    }
+
+    private int _totalRows = 0;
+
+    // Laskee hakusuodatuksilla löytyvien ohjelmien kokonaismäärän
+    private int CountDatabaseRows()
+    {
+        if (string.IsNullOrWhiteSpace(_dbPath))
+            return 0;
+
+        using var conn =
+            new SqliteConnection($"Data Source={_dbPath}");
+
+        conn.Open();
+
+        var cmd = conn.CreateCommand();
+
+        var sql = @"
+        SELECT COUNT(*)
+        FROM programs
+        WHERE 1=1
+        ";
+
+        var term = txtHaku.Text.Trim();
+        var verkko = cboVerkko.SelectedItem?.ToString();
+        var toimitus =
+            cboToimitus.SelectedItem?.ToString()
+            ?? "Kaikki";
+
+        if (!string.IsNullOrWhiteSpace(term)
+            && term.Length >= 2)
+        {
+            sql += " AND nimi LIKE $term || '%'";
+
+            cmd.Parameters.AddWithValue(
+                "$term",
+                term);
+        }
+
+        if (!string.IsNullOrWhiteSpace(verkko)
+            && verkko != "Kaikki")
+        {
+            string verkkoNumero =
+                verkko switch
+                {
+                    "YLE TV1" => "1",
+                    "YLE TV2" => "2",
+                    "MTV3" => "3",
+                    "Nelonen" => "4",
+                    "Subtv" => "6",
+                    "Yle Fem" => "13",
+                    "Yle Teema" => "14",
+                    "YLE24" => "15",
+                    "TV Finland" => "22",
+                    "MTV3+" => "30",
+                    "Urheilukanava" => "31",
+                    _ => verkko
+                };
+
+            sql += " AND verkko = $verkko";
+
+            cmd.Parameters.AddWithValue(
+                "$verkko",
+                verkkoNumero);
+        }
+
+        if (!string.IsNullOrEmpty(toimitus)
+            && toimitus != "Kaikki")
+        {
+            sql += " AND teki = $teki";
+
+            cmd.Parameters.AddWithValue(
+                "$teki",
+                toimitus);
+        }
+
+        if (chkPaiva.Checked)
+        {
+            sql += " AND pvm = $pvm";
+
+            cmd.Parameters.AddWithValue(
+                "$pvm",
+                dtpPaiva.Value.Date);
+        }
+        else if (chkInterval.Checked)
+        {
+            sql +=
+                " AND pvm BETWEEN $start AND $end";
+
+            cmd.Parameters.AddWithValue(
+                "$start",
+                dtpAlku.Value.Date);
+
+            cmd.Parameters.AddWithValue(
+                "$end",
+                dtpLoppu.Value.Date);
+        }
+
+        cmd.CommandText = sql;
+
+        return Convert.ToInt32(
+            cmd.ExecuteScalar());
     }
     private void AddColumn(string header, string dataProp, int width, bool fill = false)
     {
@@ -452,8 +615,24 @@ public void AsetaTeema(Control juuri, bool tumma)
         dtpAlku.Enabled = intervalEnabled;
         dtpLoppu.Enabled = intervalEnabled;
     }
-    private SqliteConnection? _conn;
+    private SqliteConnection _conn;
+    private string _dbPath = "";
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        _searchTimer.Stop();
 
+        _binding.DataSource = null;
+
+        grid.DataSource = null;
+
+        _conn?.Close();
+        _conn?.Dispose();
+        _conn = null;
+
+        base.OnFormClosing(e);
+    }
+
+    // Avaa SQLite-tietokannan ja alustaa indeksit (Paljon optimoitavaa vielä)
     private void LoadFromDatabase(string dbPath)
     {
 
@@ -461,14 +640,25 @@ public void AsetaTeema(Control juuri, bool tumma)
 
         _conn = new SqliteConnection($"Data Source={dbPath}");
         _conn.Open();
+        _dbPath = dbPath;
+        using var idx = _conn.CreateCommand();
 
+        idx.CommandText = @"
+        CREATE INDEX IF NOT EXISTS idx_nimi ON programs(nimi);
+        CREATE INDEX IF NOT EXISTS idx_pvm ON programs(pvm);
+        CREATE INDEX IF NOT EXISTS idx_verkko ON programs(verkko);
+        CREATE INDEX IF NOT EXISTS idx_teki ON programs(teki);
+        ";
+
+        idx.ExecuteNonQuery();
+
+        // SQLite-suorituskykyasetukset
         using (var pragma = _conn.CreateCommand())
         {
             pragma.CommandText = @"
                 PRAGMA journal_mode = DELETE;
                 PRAGMA synchronous = NORMAL;
-                PRAGMA temp_store = MEMORY;
-                PRAGMA cache_size = -128000;
+                PRAGMA cache_size = -16000;
             ";
 
             pragma.ExecuteNonQuery();
@@ -484,7 +674,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         {
             MessageBox.Show(
                 ex.ToString(),
-                "CRASH",
+                "KAATUI :(",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
@@ -492,10 +682,15 @@ public void AsetaTeema(Control juuri, bool tumma)
     }
     private void PopulateToimitusFromDb()
     {
-        if (_conn == null)
+        if (string.IsNullOrWhiteSpace(_dbPath))
             return;
 
-        var cmd = _conn.CreateCommand();
+        using var conn =
+            new SqliteConnection($"Data Source={_dbPath}");
+
+        conn.Open();
+
+        var cmd = conn.CreateCommand();
 
         cmd.CommandText =
             "SELECT DISTINCT teki FROM programs WHERE teki != '' ORDER BY teki";
@@ -514,29 +709,39 @@ public void AsetaTeema(Control juuri, bool tumma)
         if (cboToimitus.Items.Count > 0)
             cboToimitus.SelectedIndex = 0;
     }
-    private List<TvlrRow> QueryDatabase()
-        {
-            var list = new List<TvlrRow>();
 
-            if (_conn == null)
-                return list;
 
-            var cmd = _conn.CreateCommand();
+    private List<TvlrRow> QueryDatabase(
+        int limit,
+        int offset)
+    {
+        var list = new List<TvlrRow>();
 
-            var sql = @"
-            SELECT
-                docn,
-                nimi,
-                pvm,
-                kello,
-                kesto,
-                verkko,
-                teks,
-                selo,
-                teki
-            FROM programs
-            WHERE 1=1
-            ";
+        if (string.IsNullOrWhiteSpace(_dbPath))
+            return list;
+
+        using var conn =
+            new SqliteConnection($"Data Source={_dbPath}");
+
+        conn.Open();
+
+        var cmd = conn.CreateCommand();
+
+        var sql = @"
+        SELECT
+            docn,
+            nimi,
+            pvm,
+            kello,
+            kesto,
+            verkko,
+            teks,
+            selo,
+            teki,
+            tietoja
+        FROM programs
+        WHERE 1=1
+        ";
 
             var term = txtHaku.Text.Trim();
             var verkko = cboVerkko.SelectedItem?.ToString();
@@ -545,7 +750,7 @@ public void AsetaTeema(Control juuri, bool tumma)
             if (!string.IsNullOrWhiteSpace(term) && term.Length >= 2)
             {
                 sql += " AND nimi LIKE $term";
-                cmd.Parameters.AddWithValue("$term", term + "%");
+                cmd.Parameters.AddWithValue("$term", "%" + term + "%");
             }
 
             if (!string.IsNullOrWhiteSpace(verkko) && verkko != "Kaikki")
@@ -589,6 +794,10 @@ public void AsetaTeema(Control juuri, bool tumma)
             }
 
             sql += " ORDER BY pvm, kello, nimi";
+            sql += " LIMIT $limit OFFSET $offset";
+
+            cmd.Parameters.AddWithValue("$limit", limit);
+            cmd.Parameters.AddWithValue("$offset", offset);
 
             cmd.CommandText = sql;
 
@@ -610,28 +819,72 @@ public void AsetaTeema(Control juuri, bool tumma)
                     out kesto
                 );
 
-                var row = new TvlrRow
-                {
-                    DOCN = reader["docn"]?.ToString() ?? "",
+        string rowVerkko = reader["verkko"]?.ToString() ?? "";
 
-                    Nimi = reader["nimi"]?.ToString() ?? "",
+        TimeSpan? kello =
+            ParseTime(reader["kello"]?.ToString() ?? "");
 
-                    Paiva = paiva,
+        TimeSpan kestoAika =
+            TimeSpan.FromSeconds(kesto);
 
-                    KelloTimeSpan = ParseTime(
-                        reader["kello"]?.ToString() ?? ""
-                    ),
+        var row = new TvlrRow
+        {
+            DOCN = reader["docn"]?.ToString() ?? "",
 
-                    KestoTimeSpan = TimeSpan.FromSeconds(kesto),
+            Nimi = reader["nimi"]?.ToString() ?? "",
 
-                    Verkko = reader["verkko"]?.ToString() ?? "",
+            Paiva = paiva,
 
-                    TEKS = reader["teks"]?.ToString() ?? "",
+            KelloTimeSpan = kello,
 
-                    SELO = reader["selo"]?.ToString() ?? "",
+            KestoTimeSpan = kestoAika,
 
-                    TEKI = reader["teki"]?.ToString() ?? ""
-                };
+            Verkko = rowVerkko,
+
+            TEKS = reader["teks"]?.ToString() ?? "",
+
+            SELO = reader["selo"]?.ToString() ?? "",
+
+            TEKI = reader["teki"]?.ToString() ?? "",
+
+            TIETOJA = reader["tietoja"]?.ToString() ?? "",
+
+            PaivaStr =
+                paiva == DateTime.MinValue
+                    ? ""
+                    : paiva.ToString("dd.MM.yyyy"),
+
+            KelloStr =
+                kello.HasValue
+                    ? $"{(int)kello.Value.TotalHours:00}:{kello.Value.Minutes:00}"
+                    : "",
+
+            KestoStr =
+                kestoAika.TotalHours >= 1
+                    ? $"{(int)kestoAika.TotalHours}:{kestoAika.Minutes:00}:{kestoAika.Seconds:00}"
+                    : $"{kestoAika.Minutes:00}:{kestoAika.Seconds:00}",
+
+            VerkkoNimi = rowVerkko switch
+            {
+                "1" => "YLE TV1",
+                "2" => "YLE TV2",
+                "3" => "MTV3",
+                "4" => "Nelonen",
+
+                "6" => paiva < new DateTime(2001, 8, 15)
+                    ? "TVTV!"
+                    : "Subtv",
+
+                "13" => "Yle Fem",
+                "14" => "Yle Teema",
+                "15" => "YLE24",
+                "22" => "TV Finland",
+                "30" => "MTV3+",
+                "31" => "Urheilukanava",
+
+                _ => rowVerkko
+            }
+        };
 
                 list.Add(row);
             }
@@ -645,6 +898,8 @@ public void AsetaTeema(Control juuri, bool tumma)
             return t;
         return null;
     }
+
+    // Yrittää avata TVLR.db-tiedoston automaattisesti
     private void TryAutoLoadData()
     {
         string db = Path.Combine(AppContext.BaseDirectory, "TVLR.db");
@@ -658,8 +913,7 @@ public void AsetaTeema(Control juuri, bool tumma)
         lblStatus.Text = "TVLR.db ei löytynyt.";
     }
 
-
-    private void BtnAvaa_Click(object? sender, EventArgs e)
+    private void BtnAvaa_Click(object sender, EventArgs e)
     {
         using var ofd = new OpenFileDialog
         {
@@ -685,67 +939,289 @@ public void AsetaTeema(Control juuri, bool tumma)
         }
     }
 
-    private void ApplyFilters()
+    // Suorittaa haun ja päivittää näkymän
+    private async void ApplyFilters()
     {
-        var rows = QueryDatabase();
+        try
+        {
+            _loadedRows = 0;
 
-        _binding.DataSource = rows;
+            Cursor = Cursors.WaitCursor;
 
-        lblStatus.Text = $"Näytetään {rows.Count:N0} ohjelmaa.";
+            grid.Enabled = false;
+
+            lblStatus.Text = "Ladataan...";
+
+            _totalRows =
+            await Task.Run(CountDatabaseRows);
+
+            var rows =
+                await Task.Run(() =>
+                    QueryDatabase(PageSize, 0));
+
+            _loadedRows = rows.Count;
+
+            _binding.DataSource = rows;
+
+            grid.ClearSelection();
+
+        lblStatus.Text =
+            $"Näytetään {_loadedRows:N0} ohjelmaa ({_totalRows:N0} yhteensä).";
+        }
+        finally
+        {
+            grid.Enabled = true;
+
+            Cursor = Cursors.Default;
+        }
+    }
+    private async Task DownloadFileAsync(string url, string path)
+    {
+        using var response = await Http.GetAsync(url);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var fs = File.Create(path);
+
+        await response.Content.CopyToAsync(fs);
+    }
+
+    // Tarkistaa palvelimelta tietokantapäivitykset (vihdoin tuli hyödyllistä käyttöä 15v. vanhalle tietokoneelle xD)
+    private async void BtnPaivita_Click(object sender, EventArgs e)
+    {
+        try
+        {
+
+            lblStatus.Text = "Tarkistetaan päivityksiä...";
+
+            string json =
+                await Http.GetStringAsync(
+                    "https://telkkari.tv/tvlr/version.json");
+
+            var serverInfo =
+                JsonSerializer.Deserialize<VersionInfo>(
+                    json,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+            if (serverInfo == null)
+            {
+                MessageBox.Show("Virhe version tarkistuksessa.");
+                return;
+            }
+
+            int localVersion = GetLocalDbVersion();
+
+            serverInfo.updates.Sort(
+                (a, b) => a.version.CompareTo(b.version));
+
+            if (serverInfo.version <= localVersion)
+            {
+                MessageBox.Show("Tietokanta on ajan tasalla.");
+                lblStatus.Text = "Tietokanta ajan tasalla.";
+                return;
+            }
+
+            var updatesToInstall =
+                serverInfo.updates
+                    .Where(x => x.version > localVersion)
+                    .OrderBy(x => x.version)
+                    .Select(x =>
+                        $"v{x.version} - {x.description}")
+                    .ToList();
+
+            string updateList =
+                string.Join(" → ", updatesToInstall);
+
+            var result = MessageBox.Show(
+                $"Uusia ohjelmatietoja löytyi.\n\n" +
+                $"Nykyinen versio: {localVersion}\n" +
+                $"Uusin versio: {serverInfo.version}\n\n" +
+                $"Päivitykset:\n{updateList}\n\n" +
+                $"Ladataanko?",
+                "Päivitys",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result != DialogResult.Yes)
+                return;
+
+            int startingVersion = localVersion;
+            int totalInserted = 0;
+            foreach (var update in serverInfo.updates.OrderBy(x => x.version))
+            {
+                if (update.version <= startingVersion)
+                    continue;
+
+                lblStatus.Text =
+                    $"Ladataan päivitystä v{update.version} @ https://telkkari.tv/tvlr/{update.file}";
+
+                string tempDb =
+                    Path.Combine(
+                        Path.GetTempPath(),
+                        update.file);
+
+                string updateUrl =
+                    $"https://telkkari.tv/tvlr/{update.file}";
+
+                await DownloadFileAsync(updateUrl, tempDb);
+
+                lblStatus.Text =
+                    $"Ladataan päivitystä v{update.version} @ https://telkkari.tv/tvlr/{update.file}";
+
+                // Yhdistää ladatun päivitystietokannan pääkantaan (TVLR.db)
+                int inserted =
+                    await Task.Run(() => MergeDatabases(tempDb));
+
+                totalInserted += inserted;
+
+                File.Delete(tempDb);
+            }
+
+            ApplyFilters();
+
+            File.WriteAllText(
+                Path.Combine(
+                    AppContext.BaseDirectory,
+                    "dbversio.txt"),
+                serverInfo.version.ToString());
+
+            lblStatus.Text = "Päivitys valmis.";
+
+                MessageBox.Show(
+                    $"Tietokanta päivitetty!\n\nLisättiin yhteensä {totalInserted:N0} ohjelmaa.",
+                "Valmis",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Päivitys epäonnistui.\n\n" + ex.Message,
+                "Virhe",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+
+            lblStatus.Text = "Päivitys epäonnistui.";
+        }
+    }
+
+    // Hakee paikallisen tietokannan version
+    private int GetLocalDbVersion()
+    {
+        string path =
+            Path.Combine(AppContext.BaseDirectory, "dbversio.txt");
+
+        if (!File.Exists(path))
+            return 0;
+
+        if (int.TryParse(File.ReadAllText(path), out int v))
+            return v;
+
+        return 0;
+    }
+    private int MergeDatabases(string downloadedDb)
+    {
+        if (_conn == null)
+            return 0;
+
+        using var attachCmd = _conn.CreateCommand();
+
+        attachCmd.CommandText =
+            $"ATTACH DATABASE '{downloadedDb.Replace("'", "''")}' AS newdb;";
+
+        attachCmd.ExecuteNonQuery();
+
+        using var insertCmd = _conn.CreateCommand();
+
+        insertCmd.CommandText = @"
+            INSERT OR IGNORE INTO programs
+            (
+                docn,
+                nimi,
+                pvm,
+                kello,
+                kesto,
+                verkko,
+                teks,
+                selo,
+                teki,
+                tietoja
+            )
+            SELECT
+                docn,
+                nimi,
+                pvm,
+                kello,
+                kesto,
+                verkko,
+                teks,
+                selo,
+                teki,
+                tietoja
+            FROM newdb.programs;
+        ";
+
+        int inserted = insertCmd.ExecuteNonQuery();
+
+        using var detachCmd = _conn.CreateCommand();
+
+        detachCmd.CommandText = "DETACH DATABASE newdb;";
+
+        detachCmd.ExecuteNonQuery();
+
+        return inserted;
     }
 }
 public class TvlrRow
 {
+
     public string DOCN { get; set; } = "";
     public string Nimi { get; set; } = "";
     public string TEKS { get; set; } = "";
     public string SELO { get; set; } = "";
     public string TEKI { get; set; } = "";
+    public string TIETOJA { get; set; } = "";
 
     public DateTime Paiva { get; set; } = DateTime.MinValue;
     public TimeSpan? KelloTimeSpan { get; set; }
     public TimeSpan? KestoTimeSpan { get; set; }
     public string Verkko { get; set; } = "";
 
-    public string VerkkoNimi
-    {
-        get
-        {
-            return Verkko switch
-            {
-                "1" => "YLE TV1",
-                "2" => "YLE TV2",
-                "3" => "MTV3",
-                "4" => "Nelonen",
-                "6" => "Subtv",
-                "13" => "Yle Fem",
-                "14" => "Yle Teema",
-                "15" => "YLE24",
-                "22" => "TV Finland",
-                "30" => "MTV3+",
-                "31" => "Urheilukanava",
-                _ => Verkko
-            };
-        }
-    }
+    public string VerkkoNimi { get; set; } = "";
 
-    public string PaivaStr => Paiva == DateTime.MinValue ? "" : Paiva.ToString("dd.MM.yyyy");
-    public string KelloStr => KelloTimeSpan.HasValue ? $"{(int)KelloTimeSpan.Value.TotalHours:00}:{KelloTimeSpan.Value.Minutes:00}" : "";
-    public string KestoStr
-    {
-        get
-        {
-            if (KestoTimeSpan == null) return "";
-            var t = KestoTimeSpan.Value;
-            return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes:00}:{t.Seconds:00}";
-        }
-    }
+    public string PaivaStr { get; set; } = "";
+
+    public string KelloStr { get; set; } = "";
+
+    public string KestoStr { get; set; } = "";
+}
+
+public class VersionInfo
+{
+    public int version { get; set; }
+
+    public List<UpdateInfo> updates { get; set; } = new();
+}
+
+public class UpdateInfo
+{
+    public int version { get; set; }
+
+    public string file { get; set; } = "";
+
+    public string description { get; set; } = "";
 }
 public class AsetuksetForm : Form
 {
+    // Ohjelman asetukset
     Button btnTallenna;
     CheckBox chkAinaPaalla;
     CheckBox chkTummaTeema;
+
+    CheckBox chkAutoPaivitys;
     Button btnTietoja;
 
     public AsetuksetForm()
@@ -756,7 +1232,7 @@ public class AsetuksetForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(360, 120);
+        ClientSize = new Size(360, 190);
         
         var asettelu = new TableLayoutPanel
         {
@@ -778,8 +1254,15 @@ public class AsetuksetForm : Form
             AutoSize = true,
             Checked = SovellusAsetukset.TummaTeema
         };
+        chkAutoPaivitys = new CheckBox
+        {
+            Text = "Tarkista tietokannan päivitykset ohjelman käynnistyessä",
+            AutoSize = true,
+            Checked = SovellusAsetukset.AutoPaivitys
+        };
 
         asettelu.Controls.Add(chkTummaTeema);
+        asettelu.Controls.Add(chkAutoPaivitys);
 
 
         asettelu.Controls.Add(chkAinaPaalla);
@@ -793,7 +1276,11 @@ public class AsetuksetForm : Form
         {
             MessageBox.Show(
                 "Datan lisenssi: CC0-lisenssi: ei tekijänoikeutta. Dataa voi lupaa pyytämättä kopioida, muokata, levittää ja esittää, mukaan lukien kaupallisessa tarkoituksessa.\n\n" +
+                "Ohjelmatietojen lähteet:\n\n" +
                 "https://elavaarkisto.kokeile.yle.fi/data/\n\n" +
+                "https://telkussa.fi/\n\n" +
+                "https://web.archive.org/web/20160821021501/http://netello.fi/tv?MODULI_pvm=22012001\n\n" +
+                "https://files.mpoli.fi/software/TEXTS/TV-RADIO/\n\n"+
                 "Telkkari 2026",
                 "Tietoja",
                 MessageBoxButtons.OK,
@@ -828,6 +1315,8 @@ public class AsetuksetForm : Form
 
         SovellusAsetukset.AinaPaalla = chkAinaPaalla.Checked;
         SovellusAsetukset.TummaTeema = chkTummaTeema.Checked;
+        SovellusAsetukset.AutoPaivitys =
+            chkAutoPaivitys.Checked;
 
         SovellusAsetukset.Tallenna();
 
@@ -861,19 +1350,22 @@ public static class Teema
 
     public static readonly Color ValintaTausta = Color.FromArgb(0, 120, 215);
     public static readonly Color ValintaTeksti = Color.White;
-
-    public static readonly Color VaaleaTausta = SystemColors.Control;
-    public static readonly Color VaaleaTeksti = SystemColors.ControlText;
 }
+
+// Windows API -kutsut  (sori Linux ja Mac :( )
 static class NativeMethods
 {
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     public static extern int SetCurrentProcessExplicitAppUserModelID(string AppID);
 }
+
 public static class SovellusAsetukset
 {
+    // Ohjelman asetusten tallennus ja lataus
     public static bool AinaPaalla { get; set; }
     public static bool TummaTeema { get; set; }
+
+    public static bool AutoPaivitys { get; set; } = true;
 
     private static readonly string AsetusTiedosto =
         Path.Combine(AppContext.BaseDirectory, "asetukset.ini");
@@ -901,6 +1393,11 @@ public static class SovellusAsetukset
                 if (bool.TryParse(arvo, out bool tulos))
                     TummaTeema = tulos;
             }
+            else if (avain.Equals("AutoPaivitys", StringComparison.OrdinalIgnoreCase))
+            {
+                if (bool.TryParse(arvo, out bool tulos))
+                    AutoPaivitys = tulos;
+            }
         }
     }
     public static void Tallenna()
@@ -908,7 +1405,9 @@ public static class SovellusAsetukset
         var rivit = new[]
         {
             $"AinaPaalla={AinaPaalla}",
-            $"TummaTeema={TummaTeema}"
+            $"TummaTeema={TummaTeema}",
+            $"AutoPaivitys={AutoPaivitys}"
+
         };
 
         File.WriteAllLines(AsetusTiedosto, rivit, Encoding.UTF8);
