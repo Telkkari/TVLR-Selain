@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 using System.Linq;
 
 // =====================================================
-// TVLR-Selain 2.6
+// TVLR-Selain 2.6.1
 // =====================================================
 
 internal static class Program
@@ -109,7 +109,7 @@ public class MainForm : Form
         TopMost = SovellusAsetukset.AinaPaalla;
         this.Size = new Size(1835, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        Text = "TVLR-Selain 2.6";
+        Text = "TVLR-Selain 2.6.1";
         MinimumSize = new Size(1630, 300);
 
         _searchTimer.Interval = 50; //ms
@@ -517,7 +517,9 @@ public class MainForm : Form
         WHERE 1=1
         ";
 
-        var term = txtHaku.Text.Trim();
+        var term =
+            NormalizeSearch(
+                txtHaku.Text.Trim());
         var verkko = cboVerkko.SelectedItem?.ToString();
         var toimitus =
             cboToimitus.SelectedItem?.ToString()
@@ -526,11 +528,10 @@ public class MainForm : Form
         if (!string.IsNullOrWhiteSpace(term)
             && term.Length >= 2)
         {
-            sql += " AND nimi LIKE $term || '%'";
-
+            sql += " AND searchnimi LIKE $term";
             cmd.Parameters.AddWithValue(
                 "$term",
-                term);
+                "%" + term + "%");
         }
 
         if (!string.IsNullOrWhiteSpace(verkko)
@@ -800,14 +801,18 @@ public class MainForm : Form
         WHERE 1=1
         ";
 
-            var term = txtHaku.Text.Trim();
+            var term =
+                NormalizeSearch(
+                    txtHaku.Text.Trim());
             var verkko = cboVerkko.SelectedItem?.ToString();
             var toimitus = cboToimitus.SelectedItem?.ToString() ?? "Kaikki";
 
             if (!string.IsNullOrWhiteSpace(term) && term.Length >= 2)
             {
-                sql += " AND nimi LIKE $term";
-                cmd.Parameters.AddWithValue("$term", "%" + term + "%");
+                sql += " AND searchnimi LIKE $term";
+                cmd.Parameters.AddWithValue(
+                    "$term",
+                    "%" + term + "%");
             }
 
             if (!string.IsNullOrWhiteSpace(verkko) && verkko != "Kaikki")
@@ -966,6 +971,15 @@ public class MainForm : Form
             return t;
         return null;
     }
+
+    private string NormalizeSearch(string s)
+        {
+            return s
+                .ToLowerInvariant()
+                .Replace('ä', 'a')
+                .Replace('ö', 'o')
+                .Replace('å', 'a');
+        }
 
     // Yrittää avata TVLR.db-tiedoston automaattisesti
     private void TryAutoLoadData()
@@ -1308,7 +1322,8 @@ private int MergeDatabases(string downloadedDb)
             teks,
             selo,
             teki,
-            tietoja
+            tietoja,
+            searchnimi
         )
         SELECT
             docn,
@@ -1320,7 +1335,18 @@ private int MergeDatabases(string downloadedDb)
             teks,
             selo,
             teki,
-            tietoja
+            tietoja,
+            LOWER(
+                REPLACE(
+                    REPLACE(
+                        REPLACE(
+                            REPLACE(
+                                REPLACE(nimi,'Ä','a'),
+                            'ä','a'),
+                        'Ö','o'),
+                    'ö','o'),
+                'å','a')
+            )
         FROM newdb.programs;
     ";
 
