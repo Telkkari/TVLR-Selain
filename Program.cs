@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 using System.Linq;
 
 // =====================================================
-// TVLR-Selain 2.5
+// TVLR-Selain 2.6
 // =====================================================
 
 internal static class Program
@@ -109,7 +109,7 @@ public class MainForm : Form
         TopMost = SovellusAsetukset.AinaPaalla;
         this.Size = new Size(1835, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        Text = "TVLR-Selain 2.5";
+        Text = "TVLR-Selain 2.6";
         MinimumSize = new Size(1630, 300);
 
         _searchTimer.Interval = 50; //ms
@@ -165,6 +165,7 @@ public class MainForm : Form
                 "Subtv",
                 "Yle Fem",
                 "Yle Teema",
+                "Yle Extra",
                 "YLE24",
                 "TV Finland",
                 "MTV3+",
@@ -545,6 +546,7 @@ public class MainForm : Form
                     "Subtv" => "6",
                     "Yle Fem" => "13",
                     "Yle Teema" => "14",
+                    "Yle Extra" => "8",
                     "YLE24" => "15",
                     "TV Finland" => "22",
                     "MTV3+" => "30",
@@ -571,24 +573,24 @@ public class MainForm : Form
 
         if (chkPaiva.Checked)
         {
-            sql += " AND pvm = $pvm";
+            sql += " AND substr(pvm,1,10) = $pvm";
 
-            cmd.Parameters.AddWithValue(
-                "$pvm",
-                dtpPaiva.Value.Date);
+        cmd.Parameters.AddWithValue(
+            "$pvm",
+            dtpPaiva.Value.ToString("yyyy-MM-dd"));
         }
         else if (chkInterval.Checked)
         {
             sql +=
-                " AND pvm BETWEEN $start AND $end";
+                " AND substr(pvm,1,10) BETWEEN $start AND $end";
 
-            cmd.Parameters.AddWithValue(
-                "$start",
-                dtpAlku.Value.Date);
+        cmd.Parameters.AddWithValue(
+            "$start",
+            dtpAlku.Value.ToString("yyyy-MM-dd"));
 
-            cmd.Parameters.AddWithValue(
-                "$end",
-                dtpLoppu.Value.Date);
+        cmd.Parameters.AddWithValue(
+            "$end",
+            dtpLoppu.Value.ToString("yyyy-MM-dd"));
         }
 
         cmd.CommandText = sql;
@@ -640,6 +642,7 @@ public class MainForm : Form
 
         _conn = new SqliteConnection($"Data Source={dbPath}");
         _conn.Open();
+        EnsureDatabaseCompatibility();
         _dbPath = dbPath;
         using var idx = _conn.CreateCommand();
 
@@ -647,7 +650,20 @@ public class MainForm : Form
         CREATE INDEX IF NOT EXISTS idx_nimi ON programs(nimi);
         CREATE INDEX IF NOT EXISTS idx_pvm ON programs(pvm);
         CREATE INDEX IF NOT EXISTS idx_verkko ON programs(verkko);
-        CREATE INDEX IF NOT EXISTS idx_teki ON programs(teki);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_program
+        ON programs
+        (
+            docn,
+            nimi,
+            pvm,
+            kello,
+            kesto,
+            verkko,
+            teks,
+            selo,
+            teki,
+            tietoja
+        );
         ";
 
         idx.ExecuteNonQuery();
@@ -678,6 +694,47 @@ public class MainForm : Form
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
+        }
+    }
+
+    private void EnsureDatabaseCompatibility()
+    {
+        if (_conn == null)
+            return;
+
+        using var checkCmd = _conn.CreateCommand();
+
+        checkCmd.CommandText = @"
+            PRAGMA table_info(programs);
+        ";
+
+        bool hasTietoja = false;
+
+        using (var reader = checkCmd.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                string column =
+                    reader["name"]?.ToString() ?? "";
+
+                if (column.Equals(
+                    "tietoja",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    hasTietoja = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasTietoja)
+        {
+            using var alterCmd = _conn.CreateCommand();
+
+            alterCmd.CommandText =
+                "ALTER TABLE programs ADD COLUMN tietoja TEXT DEFAULT '';";
+
+            alterCmd.ExecuteNonQuery();
         }
     }
     private void PopulateToimitusFromDb()
@@ -764,6 +821,7 @@ public class MainForm : Form
                     "Subtv" => "6",
                     "Yle Fem" => "13",
                     "Yle Teema" => "14",
+                    "Yle Extra" => "8",
                     "YLE24" => "15",
                     "TV Finland" => "22",
                     "MTV3+" => "30",
@@ -783,14 +841,23 @@ public class MainForm : Form
 
             if (chkPaiva.Checked)
             {
-                sql += " AND pvm = $pvm";
-                cmd.Parameters.AddWithValue("$pvm", dtpPaiva.Value.Date);
+                sql += " AND substr(pvm,1,10) = $pvm";
+
+                cmd.Parameters.AddWithValue(
+                    "$pvm",
+                    dtpPaiva.Value.ToString("yyyy-MM-dd"));
             }
             else if (chkInterval.Checked)
             {
-                sql += " AND pvm BETWEEN $start AND $end";
-                cmd.Parameters.AddWithValue("$start", dtpAlku.Value.Date);
-                cmd.Parameters.AddWithValue("$end", dtpLoppu.Value.Date);
+                sql += " AND substr(pvm,1,10) BETWEEN $start AND $end";
+
+                cmd.Parameters.AddWithValue(
+                    "$start",
+                    dtpAlku.Value.ToString("yyyy-MM-dd"));
+
+                cmd.Parameters.AddWithValue(
+                    "$end",
+                    dtpLoppu.Value.ToString("yyyy-MM-dd"));
             }
 
             sql += " ORDER BY pvm, kello, nimi";
@@ -877,6 +944,7 @@ public class MainForm : Form
 
                 "13" => "Yle Fem",
                 "14" => "Yle Teema",
+                "8"  => "Yle Extra",
                 "15" => "YLE24",
                 "22" => "TV Finland",
                 "30" => "MTV3+",
@@ -1050,6 +1118,10 @@ public class MainForm : Form
 
             int startingVersion = localVersion;
             int totalInserted = 0;
+            int duplicatesRemoved = 0;
+                lblStatus.Text = "Poistetaan vanhoja kaksoiskappaleita...";
+                duplicatesRemoved +=
+                    await Task.Run(RemoveDuplicates);
             foreach (var update in serverInfo.updates.OrderBy(x => x.version))
             {
                 if (update.version <= startingVersion)
@@ -1076,9 +1148,15 @@ public class MainForm : Form
                     await Task.Run(() => MergeDatabases(tempDb));
 
                 totalInserted += inserted;
+                duplicatesRemoved +=
+                    await Task.Run(RemoveDuplicates);
 
                 File.Delete(tempDb);
             }
+
+            lblStatus.Text = "Optimoidaan tietokantaa...";
+
+            await Task.Run(OptimizeDatabase);
 
             ApplyFilters();
 
@@ -1088,10 +1166,16 @@ public class MainForm : Form
                     "dbversio.txt"),
                 serverInfo.version.ToString());
 
+            lblStatus.Text = "Optimoidaan tietokantaa...";
+
+            OptimizeDatabase();
+
             lblStatus.Text = "Päivitys valmis.";
 
                 MessageBox.Show(
-                    $"Tietokanta päivitetty!\n\nLisättiin yhteensä {totalInserted:N0} ohjelmaa.",
+                    $"Tietokanta päivitetty!\n\n" +
+                    $"Lisättiin yhteensä {totalInserted:N0} ohjelmaa.\n" +
+                    $"Poistettiin {duplicatesRemoved:N0} kaksoiskappaletta.",
                 "Valmis",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -1109,73 +1193,149 @@ public class MainForm : Form
     }
 
     // Hakee paikallisen tietokannan version
-    private int GetLocalDbVersion()
-    {
-        string path =
-            Path.Combine(AppContext.BaseDirectory, "dbversio.txt");
-
-        if (!File.Exists(path))
-            return 0;
-
-        if (int.TryParse(File.ReadAllText(path), out int v))
-            return v;
-
-        return 0;
-    }
-    private int MergeDatabases(string downloadedDb)
+    private int RemoveDuplicates()
     {
         if (_conn == null)
             return 0;
 
-        using var attachCmd = _conn.CreateCommand();
+        using var countCmd = _conn.CreateCommand();
 
-        attachCmd.CommandText =
-            $"ATTACH DATABASE '{downloadedDb.Replace("'", "''")}' AS newdb;";
-
-        attachCmd.ExecuteNonQuery();
-
-        using var insertCmd = _conn.CreateCommand();
-
-        insertCmd.CommandText = @"
-            INSERT OR IGNORE INTO programs
-            (
-                docn,
-                nimi,
-                pvm,
-                kello,
-                kesto,
-                verkko,
-                teks,
-                selo,
-                teki,
-                tietoja
-            )
-            SELECT
-                docn,
-                nimi,
-                pvm,
-                kello,
-                kesto,
-                verkko,
-                teks,
-                selo,
-                teki,
-                tietoja
-            FROM newdb.programs;
+        countCmd.CommandText = @"
+            SELECT COUNT(*)
+            FROM programs;
         ";
 
-        int inserted = insertCmd.ExecuteNonQuery();
+        int before =
+            Convert.ToInt32(countCmd.ExecuteScalar());
 
-        using var detachCmd = _conn.CreateCommand();
+        using var deleteCmd = _conn.CreateCommand();
 
-        detachCmd.CommandText = "DETACH DATABASE newdb;";
+        deleteCmd.CommandText = @"
+            DELETE FROM programs
+            WHERE rowid NOT IN
+            (
+                SELECT MIN(rowid)
+                FROM programs
+                GROUP BY
+                    docn,
+                    nimi,
+                    pvm,
+                    kello,
+                    kesto,
+                    verkko,
+                    teks,
+                    selo,
+                    teki,
+                    tietoja
+            );
+        ";
 
-        detachCmd.ExecuteNonQuery();
+        deleteCmd.ExecuteNonQuery();
 
-        return inserted;
+        using var countAfterCmd = _conn.CreateCommand();
+
+        countAfterCmd.CommandText = @"
+            SELECT COUNT(*)
+            FROM programs;
+        ";
+
+        int after =
+            Convert.ToInt32(countAfterCmd.ExecuteScalar());
+
+        return before - after;
+    }
+private void OptimizeDatabase()
+{
+    if (_conn == null)
+        return;
+
+    using (var vacuumCmd = _conn.CreateCommand())
+    {
+        vacuumCmd.CommandText = "VACUUM;";
+        vacuumCmd.ExecuteNonQuery();
+    }
+
+    using (var reindexCmd = _conn.CreateCommand())
+    {
+        reindexCmd.CommandText = "REINDEX;";
+        reindexCmd.ExecuteNonQuery();
+    }
+
+    using (var analyzeCmd = _conn.CreateCommand())
+    {
+        analyzeCmd.CommandText = "ANALYZE;";
+        analyzeCmd.ExecuteNonQuery();
     }
 }
-public class TvlrRow
+
+private int GetLocalDbVersion()
+{
+    string path =
+        Path.Combine(AppContext.BaseDirectory, "dbversio.txt");
+
+    if (!File.Exists(path))
+        return 0;
+
+    if (int.TryParse(File.ReadAllText(path), out int v))
+        return v;
+
+    return 0;
+}
+
+private int MergeDatabases(string downloadedDb)
+{
+    if (_conn == null)
+        return 0;
+
+    using var attachCmd = _conn.CreateCommand();
+
+    attachCmd.CommandText =
+        $"ATTACH DATABASE '{downloadedDb.Replace("'", "''")}' AS newdb;";
+
+    attachCmd.ExecuteNonQuery();
+
+    using var insertCmd = _conn.CreateCommand();
+
+    insertCmd.CommandText = @"
+        INSERT OR IGNORE INTO programs
+        (
+            docn,
+            nimi,
+            pvm,
+            kello,
+            kesto,
+            verkko,
+            teks,
+            selo,
+            teki,
+            tietoja
+        )
+        SELECT
+            docn,
+            nimi,
+            pvm,
+            kello,
+            kesto,
+            verkko,
+            teks,
+            selo,
+            teki,
+            tietoja
+        FROM newdb.programs;
+    ";
+
+    int inserted = insertCmd.ExecuteNonQuery();
+
+    using var detachCmd = _conn.CreateCommand();
+
+    detachCmd.CommandText = "DETACH DATABASE newdb;";
+
+    detachCmd.ExecuteNonQuery();
+
+    return inserted;
+}
+
+}public class TvlrRow
 {
 
     public string DOCN { get; set; } = "";
