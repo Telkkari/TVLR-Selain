@@ -2,7 +2,7 @@
 TVLR-Selain on lähetysrekisterin selausohjelma.
 
 <p align="center">
-  <img src="https://github.com/Telkkari/TVLR-Selain/blob/69379468c60083d99c8ad7f86a62ec47950e0348/TVLR-Selain%202.5.png" width="900" alt="TVLR-Selain">
+  <img src="https://github.com/Telkkari/TVLR-Selain/blob/444aecad49bf9126ac0bc0fd6e69f253c7c84901/TVLR-Selain%202.8.png" width="920" alt="TVLR-Selain">
 </p>
 
 ## Yleistä
