@@ -77,7 +77,7 @@
             <Button Content="+" Command="{Binding LisaaValilehtiCommand}" Width="32" Height="32" VerticalAlignment="Top" CornerRadius="3" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
         </StackPanel>
         
-        <!-- YLÄPALKKI: SUODATTIMET (Automaattinen skaalaus: skaalautuu koko ikkunan leveyteen) -->
+        <!-- YLÄPALKKI: SUODATTIMET-->
         <Viewbox DockPanel.Dock="Top" 
                  Stretch="Uniform" 
                  StretchDirection="Both" 
@@ -154,7 +154,7 @@
                 </Grid>
             </Grid>
 
-            <!-- YKSITTÄINEN PÄIVÄMÄÄRÄ -->
+            <!-- PÄIVÄMÄÄRÄ -->
             <Grid Margin="0,0,14,5" RowDefinitions="Auto,Auto">
                 <CheckBox Grid.Row="1" 
                           Name="chkPaivalla" 
@@ -232,7 +232,7 @@
                 </StackPanel>
             </Grid>
 
-            <!-- NAPIT: Tyhjennä suodattimet heti Vuoden jälkeen, Tarkista päivitykset viimeisenä -->
+            <!-- NAPIT-->
             <Button Content="Tyhjennä suodattimet" 
                     Command="{Binding TyhjennaCommand}" 
                     Margin="0,20,8,0" 
@@ -263,7 +263,7 @@
         <!-- ALAPALKKI: STATUS -->
         <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusTeksti}" Margin="0,4,0,0" Foreground="Gray" FontSize="11" />
 
-        <!-- DATAGRID JA LATAUSANIMAATIO SEKÄ KOROSTUSNAVIGOINTI -->
+        <!-- DATAGRID JA LATAUSANIMAATIO-->
         <Grid>
             <DataGrid Name="OhjelmaGrid" 
                       ItemsSource="{Binding NaytettavatOhjelmat}" 
@@ -355,7 +355,7 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- NIMI SARAKE (Aina selkeästi näkyvissä ja optimaalisesti renderöity) -->
+                    <!-- NIMI SARAKE-->
                     <DataGridTextColumn Header="Nimi" Binding="{Binding Nimi}" Width="*"/>
 
                     <DataGridTemplateColumn Header="Tekstitys" Width="105">
@@ -435,7 +435,7 @@
         </Grid>
     </DockPanel>
 
-        <!-- AUTOSCROLL-INDIKAATTORI (Hiiren rullapainike) -->
+        <!-- AUTOSCROLL-INDIKAATTORI-->
         <Canvas Name="AutoScrollCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <Border Name="AutoScrollIndicator" 
                     Width="32" Height="32" 
