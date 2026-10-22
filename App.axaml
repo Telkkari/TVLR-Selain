@@ -9,7 +9,6 @@
             <Setter Property="AllowAutoHide" Value="False" />
         </Style>
 
-        <!-- Estetään Tab-pysähdykset ja kohdistusongelmat passiivisissa säätimissä ja niiden sisäosissa -->
         <Style Selector="CalendarDatePicker:disabled">
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="IsTabStop" Value="False"/>
