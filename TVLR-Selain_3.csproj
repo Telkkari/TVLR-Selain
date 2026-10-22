@@ -7,7 +7,6 @@
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
 
-        <!-- Prosessin ja sovelluksen nimi Tehtävienhallinnassa ja tiedostoissa -->
         <AssemblyName>TVLR-Selain 3</AssemblyName>
         <AssemblyTitle>TVLR-Selain 3</AssemblyTitle>
         <Product>TVLR-Selain 3</Product>
@@ -15,7 +14,6 @@
         <Description>TVLR-Selain 3</Description>
         <PackageId>TVLR-Selain 3</PackageId>
 
-        <!-- Laitteistoresurssien maksimaalinen hyödyntäminen -->
         <ServerGarbageCollection>true</ServerGarbageCollection>
         <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
         <TieredCompilation>true</TieredCompilation>
