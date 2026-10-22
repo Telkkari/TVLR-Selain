@@ -1,0 +1,456 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:TVLR_Selain_3"
+        x:Class="TVLR_Selain_3.MainWindow"
+        x:DataType="local:MainWindowViewModel"
+        Title="{Binding IkkunaOtsikko}" Icon="/Assets/icon.ico" Width="1910" Height="720"
+        Topmost="{Binding AinaPaalla, Source={x:Static local:SovellusAsetukset.Instance}}"
+        Background="{Binding IkkunanTausta, Source={x:Static local:SovellusAsetukset.Instance}}">
+
+    <Grid>
+        <DockPanel Margin="10">
+        
+        <!-- VÄLILEHDET (Sulava & Välitön vaihto ilman viiveitä) -->
+        <StackPanel DockPanel.Dock="Top" 
+                    Orientation="Horizontal" 
+                    Margin="0,0,0,10" 
+                    Spacing="0">
+            <ListBox ItemsSource="{Binding Valilehdet}" SelectedItem="{Binding AktiivinenValilehti}" Background="Transparent" Padding="0" Margin="0">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.Styles>
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                    </Style>
+
+                    <Style Selector="Border.tab-box">
+                        <Setter Property="Margin" Value="0,0,5,0"/>
+                        <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderBrush}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="CornerRadius" Value="3"/>
+                        <Setter Property="ClipToBounds" Value="True"/>
+                        <Setter Property="MaxWidth" Value="240"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                    </Style>
+
+                    <Style Selector="ListBoxItem:selected Border.tab-box">
+                        <Setter Property="Background" Value="{Binding ValintaTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/> 
+                        <Setter Property="BorderBrush" Value="{Binding ValintaTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                    </Style>
+                    <Style Selector="ListBoxItem:selected TextBlock">
+                        <Setter Property="Foreground" Value="White"/>
+                    </Style>
+                    <Style Selector="ListBoxItem:selected Button">
+                        <Setter Property="Foreground" Value="White"/>
+                    </Style>
+                </ListBox.Styles>
+                
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="local:Valilehti">
+                        <Border Classes="tab-box" 
+                                PointerPressed="Tab_PointerPressed"
+                                PointerMoved="Tab_PointerMoved"
+                                PointerReleased="Tab_PointerReleased">
+                            <StackPanel Orientation="Horizontal" Height="30">
+                                <TextBlock Text="{Binding Otsikko}" VerticalAlignment="Center" Margin="10,0,5,0" MinWidth="50" />
+                                <Button Content="✕" 
+                                        Click="TabCloseButton_Click"
+                                        CommandParameter="{Binding}" 
+                                        Background="Transparent" 
+                                        BorderThickness="0" 
+                                        VerticalAlignment="Center" 
+                                        Margin="0,0,5,0" 
+                                        Padding="5,0"
+                                        IsTabStop="False"
+                                        Cursor="Arrow"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Button Content="+" Command="{Binding LisaaValilehtiCommand}" Width="32" Height="32" VerticalAlignment="Top" CornerRadius="3" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+        </StackPanel>
+        
+        <!-- YLÄPALKKI: SUODATTIMET (Automaattinen skaalaus: skaalautuu koko ikkunan leveyteen) -->
+        <Viewbox DockPanel.Dock="Top" 
+                 Stretch="Uniform" 
+                 StretchDirection="Both" 
+                 HorizontalAlignment="Stretch" 
+                 VerticalAlignment="Top" 
+                 Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
+            
+            <!-- HAKU -->
+            <StackPanel Margin="0,0,14,5">
+                <TextBlock Text="Haku" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <Grid Width="310">
+                    <TextBox Name="txtHaku" Text="{Binding Haku}" Padding="6,6,24,6" PlaceholderText="Hae ohjelman nimellä..." />
+                    <Button Content="✕" 
+                            IsTabStop="False"
+                            IsVisible="{Binding Haku.Length}"
+                            Click="TyhjennaHaku_Click"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Margin="0,0,4,0"
+                            Padding="4,2"
+                            Cursor="Hand" />
+                </Grid>
+                <CheckBox Content="Hae myös kuvauksesta" IsChecked="{Binding HaeKuvauksesta}" Margin="0,5,0,0" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+            </StackPanel>
+
+            <!-- TOIMITUS -->
+            <StackPanel Margin="0,0,14,5">
+                <TextBlock Text="Toimitus" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <ComboBox ItemsSource="{Binding Toimitukset}" SelectedItem="{Binding Toimitus}" Width="320" MaxDropDownHeight="450" />
+            </StackPanel>
+
+            <!-- KANAVA -->
+            <StackPanel Margin="0,0,14,5">
+                <TextBlock Text="Kanava" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <DropDownButton Name="btnKanavat" Content="{Binding ValitutKanavatTeksti}" Width="165">
+                    <DropDownButton.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedLeft">
+                            <ScrollViewer MaxHeight="350" Width="195" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding KanavatLista}" Margin="0,0,5,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Nimi}" IsChecked="{Binding IsSelected}" Margin="0,2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Flyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+            </StackPanel>
+
+            <!-- PÄIVÄMÄÄRÄVÄLI -->
+            <!-- Valintaruutu on puussa ensimmäisenä (Grid.Row=1), joten Tab saapuu siihen ennen syöttökenttiä -->
+            <Grid Margin="0,0,14,5" RowDefinitions="Auto,Auto">
+                <CheckBox Grid.Row="1" 
+                          Name="chkValilla" 
+                          Content="Hae päivämäärävälillä" 
+                          IsChecked="{Binding HaeValilla}" 
+                          Margin="0,5,0,0" 
+                          Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Alku pvm" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                        <CalendarDatePicker Name="dtpAlku" SelectedDate="{Binding AlkuPvm}" IsEnabled="{Binding HaeValilla}" Width="125" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="–" VerticalAlignment="Center" Margin="4,15,4,0" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Loppu pvm" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                        <CalendarDatePicker Name="dtpLoppu" SelectedDate="{Binding LoppuPvm}" IsEnabled="{Binding HaeValilla}" Width="125" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- YKSITTÄINEN PÄIVÄMÄÄRÄ -->
+            <Grid Margin="0,0,14,5" RowDefinitions="Auto,Auto">
+                <CheckBox Grid.Row="1" 
+                          Name="chkPaivalla" 
+                          Content="Hae päivämäärällä" 
+                          IsChecked="{Binding HaePaivalla}" 
+                          Margin="0,5,0,0" 
+                          Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="Päivämäärä" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                    <CalendarDatePicker Name="dtpPaiva" SelectedDate="{Binding TarkkaPaiva}" IsEnabled="{Binding HaePaivalla}" Width="125" />
+                </StackPanel>
+            </Grid>
+
+            <!-- VIIKONPÄIVÄ -->
+            <Grid Margin="0,0,14,5" RowDefinitions="Auto,Auto">
+                <CheckBox Grid.Row="1" 
+                          Name="chkViikonpaivalla" 
+                          Content="Hae viikonpäivällä" 
+                          IsChecked="{Binding HaeViikonpaivalla}" 
+                          Margin="0,5,0,0" 
+                          Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="Viikonpäivä" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                    <ComboBox SelectedIndex="{Binding ViikonpaivaIndeksi}" IsEnabled="{Binding HaeViikonpaivalla}" Width="125">
+                        <ComboBoxItem>maanantai</ComboBoxItem>
+                        <ComboBoxItem>tiistai</ComboBoxItem>
+                        <ComboBoxItem>keskiviikko</ComboBoxItem>
+                        <ComboBoxItem>torstai</ComboBoxItem>
+                        <ComboBoxItem>perjantai</ComboBoxItem>
+                        <ComboBoxItem>lauantai</ComboBoxItem>
+                        <ComboBoxItem>sunnuntai</ComboBoxItem>
+                    </ComboBox>
+                </StackPanel>
+            </Grid>
+
+            <!-- KELLONAIKA -->
+            <Grid Margin="0,0,14,5" RowDefinitions="Auto,Auto">
+                <CheckBox Grid.Row="1" 
+                          Name="chkKellonajalla" 
+                          Content="Hae kellonajalla" 
+                          IsChecked="{Binding HaeKellonajalla}" 
+                          Margin="0,5,0,0" 
+                          Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto">
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Kellonaika" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                        <TextBox Text="{Binding KelloAlkuText}" IsEnabled="{Binding HaeKellonajalla}" Width="72" PlaceholderText="0:00" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="–" VerticalAlignment="Center" Margin="4,15,4,0" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text=" " Margin="0,0,0,5" />
+                        <TextBox Text="{Binding KelloLoppuText}" IsEnabled="{Binding HaeKellonajalla}" Width="72" PlaceholderText="23:59" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- VUOSI -->
+            <Grid Margin="0,0,14,5" RowDefinitions="Auto,Auto">
+                <CheckBox Grid.Row="1" 
+                          Name="chkVuodella" 
+                          Content="Hae vuodella" 
+                          IsChecked="{Binding HaeVuodella}" 
+                          Margin="0,5,0,0" 
+                          Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="Vuosi" Margin="0,0,0,5" Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}" />
+                    <NumericUpDown Value="{Binding VuosiArvo}" 
+                                   IsEnabled="{Binding HaeVuodella}" 
+                                   Width="145" 
+                                   Minimum="1900" 
+                                   Maximum="2100" 
+                                   Increment="1" 
+                                   FormatString="0" 
+                                   ParsingNumberStyle="Integer" />
+                </StackPanel>
+            </Grid>
+
+            <!-- NAPIT: Tyhjennä suodattimet heti Vuoden jälkeen, Tarkista päivitykset viimeisenä -->
+            <Button Content="Tyhjennä suodattimet" 
+                    Command="{Binding TyhjennaCommand}" 
+                    Margin="0,20,8,0" 
+                    Height="32" 
+                    Padding="14,0" 
+                    HorizontalContentAlignment="Center" 
+                    VerticalContentAlignment="Center" 
+                    VerticalAlignment="Top" />
+            <Button Content="Asetukset" 
+                    Click="Asetukset_Click" 
+                    Margin="0,20,8,0" 
+                    Height="32" 
+                    Padding="14,0" 
+                    HorizontalContentAlignment="Center" 
+                    VerticalContentAlignment="Center" 
+                    VerticalAlignment="Top" />
+            <Button Content="Tarkista päivitykset" 
+                    Click="TarkistaPaivitykset_Click" 
+                    Margin="0,20,0,0" 
+                    Height="32" 
+                    Padding="14,0" 
+                    HorizontalContentAlignment="Center" 
+                    VerticalContentAlignment="Center" 
+                    VerticalAlignment="Top" />
+            </StackPanel>
+        </Viewbox>
+
+        <!-- ALAPALKKI: STATUS -->
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusTeksti}" Margin="0,4,0,0" Foreground="Gray" FontSize="11" />
+
+        <!-- DATAGRID JA LATAUSANIMAATIO SEKÄ KOROSTUSNAVIGOINTI -->
+        <Grid>
+            <DataGrid Name="OhjelmaGrid" 
+                      ItemsSource="{Binding NaytettavatOhjelmat}" 
+                      SelectedItem="{Binding ValittuOhjelma}"
+                      AutoGenerateColumns="False" 
+                      IsReadOnly="True" 
+                      GridLinesVisibility="All"
+                      ClipboardCopyMode="None"
+                      ScrollViewer.VerticalScrollBarVisibility="Visible"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                      ScrollViewer.AllowAutoHide="False"
+                      RowHeight="{Binding HakutuloksetRivikorkeus}"
+                      RowBackground="{Binding RiviTausta, Source={x:Static local:SovellusAsetukset.Instance}}"
+                      HorizontalGridLinesBrush="{Binding GridViivaVari, Source={x:Static local:SovellusAsetukset.Instance}}"
+                      VerticalGridLinesBrush="{Binding GridViivaVari, Source={x:Static local:SovellusAsetukset.Instance}}"
+                      Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}"
+                      Background="{Binding IkkunanTausta, Source={x:Static local:SovellusAsetukset.Instance}}"
+                      LoadingRow="OhjelmaGrid_LoadingRow"
+                      DoubleTapped="OhjelmaGrid_DoubleTapped" 
+                      KeyDown="OhjelmaGrid_KeyDown"
+                      Sorting="OhjelmaGrid_Sorting">
+                
+                <DataGrid.Styles>
+                    <!-- Pysyvä, aina näkyvillä oleva pystysuuntainen vierityspalkki (ei auto-hideä) -->
+                    <Style Selector="ScrollBar">
+                        <Setter Property="AllowAutoHide" Value="False"/>
+                    </Style>
+                    <Style Selector="ScrollBar:vertical">
+                        <Setter Property="Width" Value="18"/>
+                        <Setter Property="MinWidth" Value="18"/>
+                    </Style>
+
+                    <!-- Fonttikoon dynaaminen skaalaus ja pystykeskitys -->
+                    <Style Selector="DataGridCell TextBlock">
+                        <Setter Property="FontSize" Value="{Binding $parent[DataGrid].((local:MainWindowViewModel)DataContext).HakutuloksetFonttikoko}"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+
+                    <Style Selector="DataGridRow">
+                        <Setter Property="Background" Value="{Binding RiviTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                    </Style>
+                    <Style Selector="DataGridRow:nth-child(even)">
+                        <Setter Property="Background" Value="{Binding ParillinenRiviTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                    </Style>
+                    <Style Selector="DataGridRow.highlighted-row">
+                        <Setter Property="Background" Value="#FF664400"/>
+                        <Setter Property="FontWeight" Value="Bold"/>
+                    </Style>
+                    <Style Selector="DataGridRow:selected">
+                        <Setter Property="Background" Value="{Binding ValintaTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Style>
+                    <Style Selector="DataGridRow:nth-child(even):selected">
+                        <Setter Property="Background" Value="{Binding ValintaTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Style>
+                    <Style Selector="DataGridRow.highlighted-row:selected">
+                        <Setter Property="Background" Value="{Binding ValintaTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Style>
+                    <Style Selector="DataGridCell">
+                        <Setter Property="Padding" Value="4,0"/>
+                    </Style>
+                    <Style Selector="DataGridColumnHeader">
+                        <Setter Property="Background" Value="{Binding OtsikkoTausta, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                        <Setter Property="Foreground" Value="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}"/>
+                        <Setter Property="FontSize" Value="12"/>
+                        <Setter Property="FontFamily" Value="Segoe UI Emoji, Segoe UI, sans-serif"/>
+                        <Setter Property="Padding" Value="4,0"/>
+                    </Style>
+                </DataGrid.Styles>
+
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="" Binding="{Binding VkopvStr}" Width="45"/>
+                    <DataGridTextColumn Header="Päivä" Binding="{Binding PaivaStr}" Width="105"/>
+                    <DataGridTextColumn Header="Kello" Binding="{Binding KelloStr}" Width="75"/>
+                    <DataGridTextColumn Header="Kesto" Binding="{Binding KestoStr}" Width="85"/>
+                    <DataGridTextColumn Header="Kanava" Binding="{Binding VerkkoNimi}" Width="120"/>
+                    
+                    <DataGridTemplateColumn Header="📄" Width="44" MinWidth="38">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TvlrRow">
+                                <TextBlock Text="{Binding KuvausIkoni}" 
+                                           FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI, sans-serif"
+                                           ToolTip.Tip="{Binding KuvausVihje}"
+                                           HorizontalAlignment="Center" 
+                                           VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- NIMI SARAKE (Aina selkeästi näkyvissä ja optimaalisesti renderöity) -->
+                    <DataGridTextColumn Header="Nimi" Binding="{Binding Nimi}" Width="*"/>
+
+                    <DataGridTemplateColumn Header="Tekstitys" Width="105">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TvlrRow">
+                                <TextBlock Text="{Binding TEKS}" 
+                                           ToolTip.Tip="{Binding TeksKuvaus}" 
+                                           VerticalAlignment="Center"
+                                           Padding="4,0"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTemplateColumn Header="Selostus" Width="105">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TvlrRow">
+                                <TextBlock Text="{Binding SELO}" 
+                                           ToolTip.Tip="{Binding SeloKuvaus}" 
+                                           VerticalAlignment="Center"
+                                           Padding="4,0"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn Header="Toimitus" Binding="{Binding TEKI}" Width="320"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <!-- KELLUVA KOROSTUSNAVIGOINTI (Ctrl+Alt+F) -->
+            <Border IsVisible="{Binding OnkoKorostusPalkkiNakyvilla}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,30,30"
+                    Background="{Binding OtsikkoTausta, Source={x:Static local:SovellusAsetukset.Instance}}"
+                    BorderBrush="{Binding GridViivaVari, Source={x:Static local:SovellusAsetukset.Instance}}"
+                    BorderThickness="1"
+                    CornerRadius="5"
+                    Padding="10,6"
+                    BoxShadow="0 4 14 0 #50000000">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="◀ Edellinen" Command="{Binding EdellinenKorostusCommand}" Padding="8,4" />
+                    <TextBlock Text="{Binding KorostusSijaintiTeksti}" VerticalAlignment="Center" FontWeight="Bold" Margin="4,0" />
+                    <Button Content="Seuraava ▶" Command="{Binding SeuraavaKorostusCommand}" Padding="8,4" />
+                    <Button Content="✕" Command="{Binding SuljeKorostusCommand}" Padding="6,4" ToolTip.Tip="Sulje korostushaku" />
+                </StackPanel>
+            </Border>
+
+            <!-- TEKSTIANIMAATIO LATAUKSEN AIKANA -->
+            <Border IsVisible="{Binding OnkoTietokantaLatautumassa}"
+                    Background="Transparent"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    IsHitTestVisible="False">
+                <TextBlock Classes="pulse"
+                           Text="TVLR-Selain 3" 
+                           FontSize="32" 
+                           FontWeight="Bold"
+                           Foreground="{Binding TekstiVari, Source={x:Static local:SovellusAsetukset.Instance}}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+
+                <Border.Styles>
+                    <Style Selector="TextBlock.pulse">
+                        <Style.Animations>
+                            <Animation Duration="0:0:1.2" IterationCount="Infinite" PlaybackDirection="Alternate" Easing="SineEaseInOut">
+                                <KeyFrame Cue="0%">
+                                    <Setter Property="Opacity" Value="0.20" />
+                                </KeyFrame>
+                                <KeyFrame Cue="100%">
+                                    <Setter Property="Opacity" Value="0.95" />
+                                </KeyFrame>
+                            </Animation>
+                        </Style.Animations>
+                    </Style>
+                </Border.Styles>
+            </Border>
+        </Grid>
+    </DockPanel>
+
+        <!-- AUTOSCROLL-INDIKAATTORI (Hiiren rullapainike) -->
+        <Canvas Name="AutoScrollCanvas" IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Border Name="AutoScrollIndicator" 
+                    Width="32" Height="32" 
+                    CornerRadius="16" 
+                    Background="#E61E2430" 
+                    BorderBrush="#FF00D2FF" 
+                    BorderThickness="1.5" 
+                    IsVisible="False"
+                    BoxShadow="0 4 12 0 #80000000">
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Path Fill="#00D2FF" Data="M -4,-4 L 4,-4 L 0,-9 Z" />
+                    <Ellipse Width="4" Height="4" Fill="White" />
+                    <Path Fill="#00D2FF" Data="M -4,4 L 4,4 L 0,9 Z" />
+                </Grid>
+            </Border>
+        </Canvas>
+    </Grid>
+</Window>

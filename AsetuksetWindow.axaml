@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:TVLR_Selain_3"
+        x:Class="TVLR_Selain_3.AsetuksetWindow"
+        x:DataType="local:SovellusAsetukset"
+        Title="Asetukset" Icon="/Assets/icon.ico" Width="550" Height="260"
+        WindowStartupLocation="CenterOwner"
+        Background="{Binding IkkunanTausta}">
+    
+    <StackPanel Margin="20" Spacing="15">
+        <CheckBox Content="Näytä aina päällimmäisenä" IsChecked="{Binding AinaPaalla}" />
+        <CheckBox Content="Tarkista päivitykset käynnistyessä" IsChecked="{Binding AutoPaivitys}" />
+        
+        <StackPanel>
+            <TextBlock Text="Teema:" Margin="0,0,0,5"/>
+            <ComboBox SelectedIndex="{Binding Teema}" Width="200">
+                <ComboBoxItem>Vaalea</ComboBoxItem>
+                <ComboBoxItem>Tumma</ComboBoxItem>
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,20,0,0">
+            <Button Content="Tietoja" Click="Tietoja_Click" />
+            <Button Content="Pikanäppäimet" Click="Pikanappaimet_Click" />
+            <Button Content="Kopiointipikanäppäimet" Click="Kopiointi_Click" />
+            <Button Content="Tallenna" Click="Tallenna_Click" Background="#0078D7" Foreground="White" />
+        </StackPanel>
+    </StackPanel>
+</Window>

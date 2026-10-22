@@ -1,0 +1,46 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="TVLR_Selain_3.App">
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+        <Style Selector="ScrollBar">
+            <Setter Property="AllowAutoHide" Value="False" />
+        </Style>
+
+        <!-- Estetään Tab-pysähdykset ja kohdistusongelmat passiivisissa säätimissä ja niiden sisäosissa -->
+        <Style Selector="CalendarDatePicker:disabled">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style Selector="CalendarDatePicker:disabled TextBox">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style Selector="CalendarDatePicker:disabled Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style Selector="ComboBox:disabled">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style Selector="TextBox:disabled">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style Selector="NumericUpDown:disabled">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style Selector="NumericUpDown:disabled TextBox">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style Selector="NumericUpDown:disabled Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+    </Application.Styles>
+</Application>
